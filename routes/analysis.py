@@ -4,6 +4,8 @@ from openai import OpenAI
 import os
 import threading
 from collections import defaultdict
+
+# Import the shared status tracker and lock
 from .status import pipeline_status_tracker, status_lock
 
 # --- Initialization ---
@@ -17,17 +19,9 @@ def _do_embedding_generation(stop_event):
     embedding_model = "text-embedding-3-small"
 
     try:
-        # 1. Find which articles already have embeddings
-        existing_embeddings_res = supabase.table("article_embeddings").select("article_id").execute()
-        processed_article_ids = {item['article_id'] for item in existing_embeddings_res.data}
-
-        # 2. Fetch articles that have been scraped but not yet vectorized
-        articles_to_process_res = supabase.table("scraped_articles").select("id, source, publication_date, cleaned_text").limit(5).execute()
-        
-        articles_to_process = [
-            article for article in articles_to_process_res.data 
-            if article['id'] not in processed_article_ids and article.get('cleaned_text')
-        ]
+        # 1. Fetch articles that have been scraped but not yet vectorized.
+        articles_to_process_res = supabase.table("scraped_articles").select("id, source, publication_date, cleaned_text").eq("is_embedded", False).not_.is_("cleaned_text", "null").execute()
+        articles_to_process = articles_to_process_res.data
 
         with status_lock:
             pipeline_status_tracker["total"] = len(articles_to_process)
@@ -38,7 +32,7 @@ def _do_embedding_generation(stop_event):
                 pipeline_status_tracker["details"]["message"] = "No new articles to process."
             return
 
-        # 3. Process each article
+        # 2. Process each article
         for i, article in enumerate(articles_to_process):
             if stop_event.is_set():
                 raise InterruptedError("Pipeline stop requested by user.")
@@ -55,7 +49,7 @@ def _do_embedding_generation(stop_event):
                 )
                 embedding = embedding_response.data[0].embedding
 
-                # Insert into Supabase
+                # Insert into Supabase embeddings table
                 supabase.table("article_embeddings").insert({
                     "article_id": article['id'],
                     "source": article.get('source'),
@@ -63,6 +57,10 @@ def _do_embedding_generation(stop_event):
                     "embedding": embedding,
                     "model": embedding_model
                 }).execute()
+
+                # UPDATE: Mark the article as embedded in the source table
+                supabase.table("scraped_articles").update({"is_embedded": True}).eq("id", article['id']).execute()
+
                 total_processed += 1
 
             except Exception as e:

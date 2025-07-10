@@ -125,6 +125,7 @@ def _do_article_scraping(stop_event):
                     "title": content_data.get('title'), "author": content_data.get('author'),
                     "publication_date": content_data.get('publication_date'),
                     "raw_text": content_data.get('raw_text'), "cleaned_text": content_data.get('cleaned_text')
+                    "is_embedded": False
                 }).execute()
 
                 # Update the link status to 'fetched' immediately
