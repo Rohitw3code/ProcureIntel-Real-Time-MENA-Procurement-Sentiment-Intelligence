@@ -12,7 +12,7 @@ from .status import pipeline_status_tracker, status_lock
 
 scraper_bp = Blueprint('scraper', __name__, url_prefix='/api')
 
-# --- Background Task for Link Scraping ---
+# --- Background Task for Link Scraping (No changes here) ---
 def _do_link_scraping(scraper_names, pipeline_id, stop_event):
     try:
         scraper_modules = scraper_manager.get_scraper_modules(scraper_names)
@@ -118,7 +118,7 @@ def _do_article_scraping(stop_event):
             try:
                 content_data = scraper_module.scrape_article_content(link['url'])
                 
-                # Insert the single scraped article immediately with 'pending' status
+                # Insert the single scraped article immediately with 'pending' status for embedding and analysis
                 supabase.table("scraped_articles").insert({
                     "link_id": link['id'], 
                     "source": link['source'], 
@@ -128,19 +128,17 @@ def _do_article_scraping(stop_event):
                     "publication_date": content_data.get('publication_date'),
                     "raw_text": content_data.get('raw_text'), 
                     "cleaned_text": content_data.get('cleaned_text'),
-                    "embedding_status": "pending"  # UPDATED
+                    "embedding_status": "pending",
+                    "analysis_status": "pending" 
                 }).execute()
 
-                # Update the link status to 'fetched' immediately
                 supabase.table("article_links").update({"status": "fetched"}).eq("id", link['id']).execute()
                 
-                # Update stats
                 scraper_stats[link['source']] += 1
                 total_scraped += 1
 
             except Exception as e:
                 print(f"Failed to scrape {link['url']}: {e}")
-                # Update the link status to 'failed' immediately
                 supabase.table("article_links").update({"status": "failed"}).eq("id", link['id']).execute()
                 total_failed += 1
 

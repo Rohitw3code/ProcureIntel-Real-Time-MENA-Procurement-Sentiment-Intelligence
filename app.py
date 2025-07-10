@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from routes.pipeline import pipeline_bp
 from routes.scraper import scraper_bp
 from routes.status import status_bp
-from routes.analysis import analysis_bp # <-- Import the new analysis blueprint
+from routes.embedding import analysis_bp # <-- Import the new analysis blueprint
 
 load_dotenv()
 

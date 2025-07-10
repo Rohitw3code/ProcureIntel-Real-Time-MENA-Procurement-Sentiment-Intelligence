@@ -35,9 +35,10 @@ CREATE TABLE IF NOT EXISTS scraped_articles (
     publication_date TIMESTAMP WITH TIME ZONE,
     raw_text TEXT,
     cleaned_text TEXT,
-    embedding_status TEXT DEFAULT 'pending' CHECK (embedding_status IN ('pending', 'embedded', 'failed')), -- UPDATED
+    embedding_status TEXT DEFAULT 'pending' CHECK (embedding_status IN ('pending', 'success', 'failed')),
+    analysis_status TEXT DEFAULT 'pending' CHECK (analysis_status IN ('pending', 'success', 'failed')), -- NEW COLUMN
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(link_id) -- Ensures that we only store one copy of each article.
+    UNIQUE(link_id)
 );
 
 -- This table will store the vector embeddings for each article.
