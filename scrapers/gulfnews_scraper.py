@@ -1,6 +1,7 @@
 import requests
 import json
 from bs4 import BeautifulSoup
+from utils import clean_article_text
 import re
 
 # --- Scraper Configuration ---
@@ -100,7 +101,7 @@ def scrape_article_content(url):
         raw_text_list = [p.get_text(strip=True) for p in story_body_divs]
         text_content = ' '.join(raw_text_list)
         raw_text = text_content
-        cleaned_text = ' '.join(text_content.split())
+        cleaned_text = clean_article_text(raw_text)
 
         return {
             'url': article_url,

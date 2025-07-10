@@ -5,3 +5,9 @@ python-dotenv
 requests
 bs4
 lxml
+langchain
+langchain-core
+langchain-groq
+langchain-openai
+langchain-community
+psycopg2

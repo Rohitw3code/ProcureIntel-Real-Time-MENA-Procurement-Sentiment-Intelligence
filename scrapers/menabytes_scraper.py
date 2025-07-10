@@ -2,6 +2,7 @@
 
 import requests
 from bs4 import BeautifulSoup
+from utils import clean_article_text
 
 # --- Scraper Configuration ---
 SOURCE_NAME = "menabytes.com"
@@ -59,7 +60,7 @@ def scrape_article_content(url):
         if content_area:
             raw_text = content_area.get_text(separator='\n', strip=True)
             paragraphs = content_area.find_all('p')
-            cleaned_text = '\n'.join([p.get_text(strip=True) for p in paragraphs])
+            cleaned_text = clean_article_text(raw_text)
         
         return {
             'url': url,

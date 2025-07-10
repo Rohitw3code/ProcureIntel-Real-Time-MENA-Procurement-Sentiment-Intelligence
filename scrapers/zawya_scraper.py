@@ -2,6 +2,7 @@
 
 import requests
 from bs4 import BeautifulSoup
+from utils import clean_article_text
 
 SOURCE_NAME = "zawya.com"
 BASE_URL = "https://www.zawya.com"
@@ -50,8 +51,7 @@ def scrape_article_content(url):
         
         if article_body_div:
             raw_text = article_body_div.get_text(separator='\n', strip=True)
-            paragraphs = article_body_div.find_all('p')
-            cleaned_text = '\n'.join([p.text.strip() for p in paragraphs])
+            cleaned_text = clean_article_text(raw_text)
         else:
             raw_text = "N/A"
             cleaned_text = "N/A"
