@@ -124,7 +124,7 @@ def _do_article_scraping(stop_event):
                     "link_id": link['id'], "source": link['source'], "url": content_data.get('url'),
                     "title": content_data.get('title'), "author": content_data.get('author'),
                     "publication_date": content_data.get('publication_date'),
-                    "raw_text": content_data.get('raw_text'), "cleaned_text": content_data.get('cleaned_text')
+                    "raw_text": content_data.get('raw_text'), "cleaned_text": content_data.get('cleaned_text'),
                     "is_embedded": False
                 }).execute()
 
