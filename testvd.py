@@ -19,13 +19,12 @@ query_embedding = embedding_response.data[0].embedding
 
 print(f"✅ Query embedding dimension: {len(query_embedding)}")
 
-# === Connect to Supabase Postgres directly ===
 conn = psycopg2.connect(
-    host="aws-0-ap-south-1.pooler.supabase.com",
-    dbname="postgres",
-    user="postgres.ofnelyqiyzsfzqondyen",
-    password="rohit@SPACX",
-    port=6543
+    host=os.getenv("SUPABASE_DB_HOST"),
+    dbname=os.getenv("SUPABASE_DB_NAME"),
+    user=os.getenv("SUPABASE_DB_USER"),
+    password=os.getenv("SUPABASE_DB_PASSWORD"),
+    port=5432
 )
 
 cur = conn.cursor()
