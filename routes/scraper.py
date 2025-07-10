@@ -3,10 +3,10 @@ from scrapers import scraper_manager
 from utils import hash_url
 from datetime import datetime, timezone
 from database import supabase
+from collections import defaultdict
+import json
 
 scraper_bp = Blueprint('scraper', __name__, url_prefix='/api')
-
-
 
 @scraper_bp.route('/scraper-names', methods=['GET'])
 def get_scraper_names():
@@ -24,7 +24,8 @@ def run_link_scrapers():
     """
     Ensures no other pipeline is running, then starts a new run.
     It runs scrapers, filters out links that already exist in the DB,
-    and saves only the new ones.
+    saves only the new ones, and records the scraper counts as a JSON
+    object within the pipeline run itself.
     """
     pipeline_id = None
     try:
@@ -65,10 +66,10 @@ def run_link_scrapers():
             source_name = module.SOURCE_NAME
             print(f"--- Running link scraper for: {source_name} ---")
             urls = module.get_article_urls()
-            # Associate each URL with its source for later use
             all_scraped_urls.extend([(url, source_name) for url in urls])
 
         links_to_insert = []
+        scraper_stats = defaultdict(int)
         if all_scraped_urls:
             # 4. Check which links already exist in the database
             url_hashes = [hash_url(url) for url, source in all_scraped_urls]
@@ -85,23 +86,27 @@ def run_link_scrapers():
                         "source": source,
                         "status": "new"
                     })
+                    # Count new links per scraper
+                    scraper_stats[source] += 1
 
         # 6. Insert only the new links into the database
         if links_to_insert:
             supabase.table("article_links").insert(links_to_insert).execute()
 
-        # 7. Update pipeline run to COMPLETED
+        # 7. Update pipeline run to COMPLETED with stats
         end_time_iso = datetime.now(timezone.utc).isoformat()
         supabase.table("pipeline_runs").update({
             "status": "COMPLETED",
             "end_time": end_time_iso,
-            "new_links_found": len(links_to_insert)
+            "new_links_found": len(links_to_insert),
+            "scraper_stats": json.dumps(scraper_stats) # Serialize the dictionary to a JSON string
         }).eq("id", pipeline_id).execute()
 
         return jsonify({
             "message": "Link scraping complete.",
             "pipeline_id": pipeline_id,
-            "links_found": len(links_to_insert)
+            "links_found": len(links_to_insert),
+            "scraper_stats": scraper_stats
         }), 200
 
     except Exception as e:
@@ -119,8 +124,6 @@ def run_link_scrapers():
             "details": str(e),
             "pipeline_id": pipeline_id
         }), 500
-
-
 
 @scraper_bp.route('/new-links', methods=['GET'])
 def get_new_links():

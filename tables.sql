@@ -1,7 +1,21 @@
+-- This table stores the links to be scraped.
 CREATE TABLE article_links (
     id VARCHAR(255) PRIMARY KEY,  -- The URL hash as unique key
     url TEXT NOT NULL,
     source VARCHAR(255),
-    scraped_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    scraped_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(20) CHECK (status IN ('failed', 'new', 'fetched'))
+);
+
+-- This table tracks the status and results of each pipeline execution.
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    id SERIAL PRIMARY KEY,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE,
+    new_links_found INTEGER,
+    articles_scraped INTEGER,
+    entities_analyzed INTEGER,
+    status TEXT CHECK (status IN ('RUNNING', 'COMPLETED', 'FAILED', 'PAUSED')),
+    details TEXT, -- To store error messages or other details
+    scraper_stats JSONB -- Stores the count of new links found by each scraper as a JSON object.
 );

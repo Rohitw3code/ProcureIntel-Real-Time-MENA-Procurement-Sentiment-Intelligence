@@ -5,7 +5,10 @@ pipeline_bp = Blueprint('api', __name__, url_prefix='/api')
 
 @pipeline_bp.route('/pipelines', methods=['GET'])
 def get_all_pipelines():
-    """Fetches all pipeline runs, ordered by most recent first."""
+    """
+    Fetches all pipeline runs, ordered by most recent first.
+    Each run will include the scraper_stats JSON object if it exists.
+    """
     try:
         response = supabase.table("pipeline_runs").select("*").order("start_time", desc=True).execute()
         return jsonify(response.data), 200
@@ -14,7 +17,10 @@ def get_all_pipelines():
 
 @pipeline_bp.route('/pipelines/latest', methods=['GET'])
 def get_latest_pipeline():
-    """Fetches the most recently started pipeline run, regardless of status."""
+    """
+    Fetches the most recently started pipeline run, regardless of status.
+    This will include the scraper_stats JSON object if it exists.
+    """
     try:
         response = supabase.table("pipeline_runs").select("*").order("start_time", desc=True).limit(1).single().execute()
         return jsonify(response.data), 200
@@ -34,7 +40,10 @@ def get_running_pipeline():
 
 @pipeline_bp.route('/pipelines/<int:pipeline_id>', methods=['GET'])
 def get_pipeline_by_id(pipeline_id):
-    """Fetches a specific pipeline run by its ID."""
+    """
+    Fetches a specific pipeline run by its ID.
+    This will include the scraper_stats JSON object if it exists.
+    """
     try:
         response = supabase.table("pipeline_runs").select("*").eq("id", pipeline_id).single().execute()
         return jsonify(response.data), 200
