@@ -1,11 +1,13 @@
 import os
 import hashlib
 from datetime import datetime, timezone
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request,blueprints
 from flask_cors import CORS
-from supabase import create_client, Client
 from dotenv import load_dotenv
 from scrapers import scraper_manager
+from routes.pipeline import pipeline_bp
+from database import supabase
+
 
 # --- App & DB Initialization ---
 load_dotenv()
@@ -13,23 +15,16 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# Initialize Supabase client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+app.register_blueprint(pipeline_bp)
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Supabase credentials not found in .env file")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 
 # --- Helper Function ---
 def hash_url(url: str) -> str:
     """Creates a unique, consistent SHA256 hash for a given URL."""
     return hashlib.sha256(url.encode('utf-8')).hexdigest()
-
-
-# --- API Endpoints ---
 
 @app.route('/scraper-names', methods=['GET'])
 def get_scraper_names():
@@ -143,43 +138,6 @@ def run_link_scrapers():
             "pipeline_id": pipeline_id
         }), 500
 
-@app.route('/pipelines', methods=['GET'])
-def get_all_pipelines():
-    """Fetches all pipeline runs, ordered by most recent first."""
-    try:
-        response = supabase.table("pipeline_runs").select("*").order("start_time", desc=True).execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        return jsonify({"error": "Failed to fetch pipeline runs", "details": str(e)}), 500
-
-@app.route('/pipelines/latest', methods=['GET'])
-def get_latest_pipeline():
-    """Fetches the most recently started pipeline run, regardless of status."""
-    try:
-        response = supabase.table("pipeline_runs").select("*").order("start_time", desc=True).limit(1).single().execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        return jsonify({"error": "Failed to fetch the latest pipeline run", "details": str(e)}), 404
-
-@app.route('/pipelines/running', methods=['GET'])
-def get_running_pipeline():
-    """Fetches the currently running pipeline, if one exists."""
-    try:
-        response = supabase.table("pipeline_runs").select("*").eq("status", "RUNNING").limit(1).single().execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        # Supabase throws an error if .single() finds no record, which is expected here.
-        return jsonify({"message": "No pipeline is currently running."}), 200
-
-
-@app.route('/pipelines/<int:pipeline_id>', methods=['GET'])
-def get_pipeline_by_id(pipeline_id):
-    """Fetches a specific pipeline run by its ID."""
-    try:
-        response = supabase.table("pipeline_runs").select("*").eq("id", pipeline_id).single().execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        return jsonify({"error": "Failed to fetch pipeline status", "details": str(e)}), 404
 
 
 @app.route('/new-links', methods=['GET'])
