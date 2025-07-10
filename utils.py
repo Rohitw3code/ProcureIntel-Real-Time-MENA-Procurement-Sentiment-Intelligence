@@ -1,4 +1,11 @@
 import re
+import hashlib
+
+
+def hash_url(url: str) -> str:
+    """Creates a unique, consistent SHA256 hash for a given URL."""
+    return hashlib.sha256(url.encode('utf-8')).hexdigest()
+
 
 def clean_article_text(raw_text: str) -> str:
     """
