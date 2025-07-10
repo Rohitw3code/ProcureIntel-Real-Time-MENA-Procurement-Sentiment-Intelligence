@@ -12,14 +12,13 @@ from .status import pipeline_status_tracker, status_lock
 
 scraper_bp = Blueprint('scraper', __name__, url_prefix='/api')
 
-# --- Background Task for Link Scraping (No changes here) ---
+# --- Background Task for Link Scraping ---
 def _do_link_scraping(scraper_names, pipeline_id, stop_event):
     try:
         scraper_modules = scraper_manager.get_scraper_modules(scraper_names)
         if not scraper_modules:
             raise ValueError("No valid scrapers found for the given names")
 
-        # --- Update Status: Start ---
         with status_lock:
             pipeline_status_tracker["total"] = len(scraper_modules)
             pipeline_status_tracker["progress"] = 0
@@ -119,13 +118,17 @@ def _do_article_scraping(stop_event):
             try:
                 content_data = scraper_module.scrape_article_content(link['url'])
                 
-                # Insert the single scraped article immediately
+                # Insert the single scraped article immediately with 'pending' status
                 supabase.table("scraped_articles").insert({
-                    "link_id": link['id'], "source": link['source'], "url": content_data.get('url'),
-                    "title": content_data.get('title'), "author": content_data.get('author'),
+                    "link_id": link['id'], 
+                    "source": link['source'], 
+                    "url": content_data.get('url'),
+                    "title": content_data.get('title'), 
+                    "author": content_data.get('author'),
                     "publication_date": content_data.get('publication_date'),
-                    "raw_text": content_data.get('raw_text'), "cleaned_text": content_data.get('cleaned_text'),
-                    "is_embedded": False
+                    "raw_text": content_data.get('raw_text'), 
+                    "cleaned_text": content_data.get('cleaned_text'),
+                    "embedding_status": "pending"  # UPDATED
                 }).execute()
 
                 # Update the link status to 'fetched' immediately
@@ -156,7 +159,7 @@ def _do_article_scraping(stop_event):
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
 
-# --- API Endpoints (No changes here) ---
+# --- API Endpoints ---
 @scraper_bp.route('/run-link-scrapers', methods=['POST'])
 def run_link_scrapers():
     with status_lock:
@@ -199,25 +202,3 @@ def scrape_articles_endpoint():
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
         return jsonify({"error": "Failed to start article scraping process", "details": str(e)}), 500
-
-@scraper_bp.route('/scraper-names', methods=['GET'])
-def get_scraper_names():
-    """
-    Returns a list of all available scraper source names.
-    """
-    try:
-        scraper_names = scraper_manager.get_all_scraper_names()
-        return jsonify(scraper_names), 200
-    except Exception as e:
-        return jsonify({"error": "Failed to discover scrapers", "details": str(e)}), 500
-
-@scraper_bp.route('/new-links', methods=['GET'])
-def get_new_links():
-    """
-    Fetches all links from the database that have the status 'new'.
-    """
-    try:
-        response = supabase.table("article_links").select("url, source").eq("status", "new").execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        return jsonify({"error": "Failed to fetch new links", "details": str(e)}), 500

@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     scraper_stats JSONB -- Stores the count of new links found by each scraper as a JSON object.
 );
 
+-- Optional: Add a fast similarity search index
+CREATE INDEX IF NOT EXISTS article_embeddings_vector_idx
+    ON article_embeddings USING ivfflat (embedding vector_l2_ops);
+
 -- This table stores the detailed content scraped from each article.
 CREATE TABLE IF NOT EXISTS scraped_articles (
     id SERIAL PRIMARY KEY,
@@ -31,6 +35,19 @@ CREATE TABLE IF NOT EXISTS scraped_articles (
     publication_date TIMESTAMP WITH TIME ZONE,
     raw_text TEXT,
     cleaned_text TEXT,
+    embedding_status TEXT DEFAULT 'pending' CHECK (embedding_status IN ('pending', 'embedded', 'failed')), -- UPDATED
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(link_id) -- Ensures that we only store one copy of each article.
+);
+
+-- This table will store the vector embeddings for each article.
+CREATE TABLE IF NOT EXISTS article_embeddings (
+    id SERIAL PRIMARY KEY,
+    article_id INTEGER NOT NULL REFERENCES scraped_articles(id) ON DELETE CASCADE,
+    source VARCHAR(255),
+    publication_date TIMESTAMP WITH TIME ZONE,
+    model VARCHAR(255),
+    embedding vector(1536), -- Dimension for OpenAI's text-embedding-3-small model
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(article_id) -- Ensures only one embedding per article.
 );

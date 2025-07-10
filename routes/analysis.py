@@ -19,8 +19,8 @@ def _do_embedding_generation(stop_event):
     embedding_model = "text-embedding-3-small"
 
     try:
-        # 1. Fetch articles that have been scraped but not yet vectorized.
-        articles_to_process_res = supabase.table("scraped_articles").select("id, source, publication_date, cleaned_text").eq("is_embedded", False).not_.is_("cleaned_text", "null").execute()
+        # 1. Fetch articles that are pending embedding.
+        articles_to_process_res = supabase.table("scraped_articles").select("id, source, publication_date, cleaned_text").eq("embedding_status", "pending").not_.is_("cleaned_text", "null").execute()
         articles_to_process = articles_to_process_res.data
 
         with status_lock:
@@ -58,13 +58,14 @@ def _do_embedding_generation(stop_event):
                     "model": embedding_model
                 }).execute()
 
-                # UPDATE: Mark the article as embedded in the source table
-                supabase.table("scraped_articles").update({"is_embedded": True}).eq("id", article['id']).execute()
-
+                # Mark the article as 'embedded' in the source table
+                supabase.table("scraped_articles").update({"embedding_status": "embedded"}).eq("id", article['id']).execute()
                 total_processed += 1
 
             except Exception as e:
                 print(f"Failed to process article {article['id']}: {e}")
+                # Mark the article as 'failed' in the source table
+                supabase.table("scraped_articles").update({"embedding_status": "failed"}).eq("id", article['id']).execute()
                 total_failed += 1
 
         with status_lock:
@@ -92,7 +93,6 @@ def generate_embeddings_endpoint():
         if pipeline_status_tracker["is_running"]:
             return jsonify({"error": f"A process is already running: {pipeline_status_tracker['current_stage']}"}), 409
         
-        # Set the status for the new process
         pipeline_status_tracker.update({
             "is_running": True,
             "current_stage": "Generating Embeddings",
@@ -103,7 +103,6 @@ def generate_embeddings_endpoint():
         })
 
     try:
-        # Start the background thread
         thread = threading.Thread(target=_do_embedding_generation, args=(pipeline_status_tracker["stop_event"],))
         thread.start()
         return jsonify({"message": "Embedding generation process started in the background."}), 202
