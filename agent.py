@@ -86,20 +86,19 @@ extraction_chain = prompt | structured_llm
 
 # Example 3: Single-company sentiment (negative disruption)
 sentiment_article_disruption = """
-The Ministry of Energy and Infrastructure, represented by the Sheikh Zayed Housing Programme, announced the launch of an initiative to ensure the financing of housing support decisions for citizens benefiting from housing loans, with a particular focus on senior citizens.
-As part of the Year of Community initiatives and with the aim of providing comprehensive insurance coverage, the initiative aims to provide life insurance coverage that fully secures the value of the housing loan. It addresses previous challenges faced by this group, where the maximum loan coverage age was limited to 70 years, leading to the rejection of some financing applications.
-The insurance coverage has been designed to be unified, fair, and offered at a low cost, ensuring that all eligible citizens benefit from current and future housing loans. The insurance covers cases of death or total permanent disability, whether due to an accident or other causes, with extended coverage up to the age of 95, providing long-term financial protection for Emirati families.
-The Ministry indicated that the initiative is being implemented in collaboration with the Central Bank of the UAE, financing partners, and Takaful service providers, along with a wide range of national insurance companies, including Sukoon Takaful, and Abu Dhabi National Insurance Company (ADNIC).
-Suhail Mohamed Al Mazrouei, Minister of Energy and Infrastructure, affirmed that the initiative aligns with the leadership's directives to enhance the stability of Emirati families and ensure a decent life for all segments of society.
-He said, "Our wise leadership places the comfort and happiness of citizens at the forefront of its priorities. This initiative reflects the UAE's firm commitment to providing adequate housing as a cornerstone of comprehensive development. It represents a significant step in supporting senior citizens, as it is designed to address the challenges related to housing finance for this group, thereby improving their quality of life and contributing to family stability."
-Al Mazrouei added that collaboration with the banking sector and national insurance companies reflects the UAE's strategic vision of building sustainable partnerships that support social and economic development. He praised the ongoing efforts to develop the housing system in the UAE into a global model.
-Mohamed Al Mansouri, Director-General of Sheikh Zayed Housing Programme, affirmed that the initiative embodies the leadership's forward-looking vision to empower Emirati families and strengthen their social stability.
-He explained that through this initiative, the program aims to provide flexible financing solutions that meet the needs of senior citizens, while ensuring comprehensive insurance coverage to protect them from financial risks.
-Al Mansouri pointed out that raising the maximum loan coverage age to 95 years marks a qualitative shift in housing policy, as it opens broader opportunities to benefit from housing support, enhancing social equity and reducing rejection rates caused by insurance or financing constraints.
-In line with the initiative, the Central Bank of the UAE has issued a new regulatory notice allowing banks and financing companies to adopt more flexible financing models. The notice also permits financing for citizens with existing mortgages, provided that the new property serves as their primary and actual place of residence.
-Citizens benefiting from the national loan programme are included after verifying their repayment capability, which enhances the inclusiveness of the initiative and ensures fairness in the distribution of housing support.
-This initiative is part of a series of achievements by the Sheikh Zayed Housing Programme, reflecting the UAE's commitment to enhancing the quality of life for its citizens. In recent years, the programme has undergone strategic developments that accelerated the housing support process, improved customer satisfaction, and expanded partnerships with the banking and financial sectors.
-In support of the initiative to provide housing for senior citizens and special insurance protection for housing loans, the Ministry of Energy and Infrastructure, represented by the Sheikh Zayed Housing Programme, and Takaful service providers signed a partnership agreement with both Abu Dhabi National Insurance Company (ADNIC) a
+U.S.-based engineering consultancy Parsons announced on Tuesday that it has been appointed as the Project Management Consultant on the Dubai Metro Blue Line project by the Roads and Transport Authority (RTA).
+Under the five-year contract, Parsons will provide comprehensive project management services including design review, procurement support, construction supervision, testing and commissioning oversight, and project handover management for the new metro line, which is expected to commence operations in 2029.
+The contract value wasn't disclosed.
+The Blue Line will span 30 kilometres and include 14 stations, enhancing connectivity between key districts, including Mirdif, Dubai Silicon Oasis, Dubai Creek Harbour, and Dubai Festival City.
+Upon
+completion
+, the line is expected to accommodate up to 320,000 passengers per day, supporting Dubai’s 2040 Urban Master Plan for sustainable urban mobility.
+Parsons has rendered services for key infrastructure projects in Dubai including Red and Green Lines, and Route 2020 expansion of Dubai Metro, the Dubai Intelligent Traffic Systems Centre, the Infinity Bridge, and more than 100 highway, bridge and tunnel projects across the Emirate.
+(Writing by SA Kader; Editing by Anoop Menon)
+(anoop.menon@lseg.com)
+Subscribe to our Projects' PULSE
+newsletter that brings you trustworthy news, updates and insights on project activities, developments, and partnerships across sectors in the Middle East and Africa.
+
 """
 
 # print("--- Analyzing Tender Article ---")

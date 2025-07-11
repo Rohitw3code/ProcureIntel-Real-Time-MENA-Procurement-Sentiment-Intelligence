@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from database import supabase
 from .agent_manager import get_extraction_chain
 from .status import pipeline_status_tracker, status_lock
+from .cost_calculator import calculate_analysis_cost, calculate_embedding_cost
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/analysis')
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -42,10 +43,18 @@ def _do_entity_extraction(pipeline_id, stop_event, model_type: str, model_name: 
                 "model_type": model_type,
                 "model_name": model_name
                 })
+            
+            analysis_cost = calculate_analysis_cost(analysis_result, article['cleaned_text'], model_type, model_name)
+
             if analysis_result.mode == "Ignore":
                 supabase.table("scraped_articles").update({"analysis_status": "success"}).eq("id", article['id']).execute()
             else:
                 analysis_data = analysis_result.dict(exclude={"company_sentiments"})
+                analysis_data_with_cost = {
+                    "article_id": article['id'],
+                    "cost": analysis_cost,
+                    **analysis_data
+                }
                 analysis_insert_res = supabase.table("article_analysis").insert({
                     "article_id": article['id'],
                     **analysis_data
@@ -57,14 +66,27 @@ def _do_entity_extraction(pipeline_id, stop_event, model_type: str, model_name: 
                 supabase.table("scraped_articles").update({"analysis_status": "success"}).eq("id", article['id']).execute()
 
             total_processed += 1
-            run_res = supabase.table("pipeline_runs").select("entities_analyzed").eq("id", pipeline_id).single().execute()
-            current_count = run_res.data.get("entities_analyzed", 0) or 0
-            supabase.table("pipeline_runs").update({"entities_analyzed": current_count + 1}).eq("id", pipeline_id).execute()
+            run_res = supabase.table("pipeline_runs").select("analysis_cost, total_cost,articles_analyzed").eq("id", pipeline_id).single().execute()
+            current_count = run_res.data.get("articles_analyzed", 0) or 0
+            print(f"Current count: {current_count}")
+            current_count += 1
+            current_analysis_cost = run_res.data.get("analysis_cost", 0) or 0
+            current_total_cost = run_res.data.get("total_cost", 0) or 0
+            print("current_count:", current_count)
+            supabase.table("pipeline_runs").update({
+                "articles_analyzed": current_count,
+                "analysis_cost": current_analysis_cost + analysis_cost,
+                "total_cost": current_total_cost + analysis_cost
+            }).eq("id", pipeline_id).execute()
+
+            print(f"Article {article['id']} analyzed successfully")    
+
 
         except Exception as e:
             print(f"Failed to analyze article {article['id']}: {e}")
             supabase.table("scraped_articles").update({"analysis_status": "failed"}).eq("id", article['id']).execute()
             total_failed += 1
+            print(f"Article {article['id']} analyzed with errors: {e}")    
     return total_processed, total_failed
 
 def _do_embedding_generation(pipeline_id, stop_event):
@@ -87,15 +109,28 @@ def _do_embedding_generation(pipeline_id, stop_event):
         try:
             embedding_response = client.embeddings.create(model=embedding_model, input=article['cleaned_text'])
             embedding = embedding_response.data[0].embedding
-            supabase.table("article_embeddings").insert({"article_id": article['id'], "source": article.get('source'), "publication_date": article.get('publication_date'), "embedding": embedding, "model": embedding_model}).execute()
+
+            embedding_cost = calculate_embedding_cost(article['cleaned_text'], embedding_model)
+
+            supabase.table("article_embeddings").insert({"article_id": article['id'], "source": article.get('source'), "publication_date": article.get('publication_date'), 
+                                                         "embedding": embedding, "model": embedding_model, "cost": embedding_cost}).execute()
             supabase.table("scraped_articles").update({"embedding_status": "success"}).eq("id", article['id']).execute()
             
             total_processed += 1
-            # Increment the counter in the database by reading and then writing the new value
-            run_res = supabase.table("pipeline_runs").select("articles_embedded").eq("id", pipeline_id).single().execute()
-            current_count = run_res.data.get("articles_embedded", 0) or 0 # Handle null value
-            supabase.table("pipeline_runs").update({"articles_embedded": current_count + 1}).eq("id", pipeline_id).execute()
 
+            run_res = supabase.table("pipeline_runs").select("embedding_cost, total_cost,articles_embedded").eq("id", pipeline_id).single().execute()
+            current_embedding_cost = run_res.data.get("embedding_cost", 0) or 0
+            current_total_cost = run_res.data.get("total_cost", 0) or 0
+            current_count = run_res.data.get("articles_embedded", 0) or 0 # Handle null value
+
+            supabase.table("pipeline_runs").update({
+                "articles_embedded": current_count + 1,
+                "embedding_cost": current_embedding_cost + embedding_cost,
+                "total_cost": current_total_cost + embedding_cost
+            }).eq("id", pipeline_id).execute()
+
+            print(f"Article {article['id']} embedded successfully")
+        
         except Exception as e:
             print(f"Failed to process article {article['id']}: {e}")
             supabase.table("scraped_articles").update({"embedding_status": "failed"}).eq("id", article['id']).execute()
