@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS article_analysis (
   commodities TEXT[],
   contract_value TEXT,  -- Consider changing to NUMERIC in future
   deadline TEXT,        -- Consider changing to DATE/TIMESTAMP in future
+  model_type TEXT,
+  model_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(article_id)
 );

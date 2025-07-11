@@ -12,7 +12,7 @@ from .embedding import _do_embedding_generation, _do_entity_extraction
 
 pipeline_bp = Blueprint('pipeline', __name__, url_prefix='/api/pipeline')
 
-def _run_full_pipeline(pipeline_id, scraper_names, stop_event):
+def _run_full_pipeline(pipeline_id, scraper_names, stop_event, model_type, model_name):
     """The master orchestrator for the entire ETL pipeline."""
     try:
         with status_lock:
@@ -21,18 +21,17 @@ def _run_full_pipeline(pipeline_id, scraper_names, stop_event):
         
         links_found, scraper_stats = _do_link_scraping(pipeline_id, scraper_names, stop_event)
         supabase.table("pipeline_runs").update({"new_links_found": links_found, "scraper_stats": json.dumps(scraper_stats)}).eq("id", pipeline_id).execute()
+        print(f"Links found: {links_found}")
 
         with status_lock:
             pipeline_status_tracker["current_stage"] = "Scraping Articles"
         articles_scraped, _ = _do_article_scraping(pipeline_id, stop_event)
-        
-        # with status_lock:
-        #     pipeline_status_tracker["current_stage"] = "Generating Embeddings"
-        # articles_embedded, _ = _do_embedding_generation(pipeline_id, stop_event)
+        print(f"Articles scraped: {articles_scraped}")
         
         with status_lock:
             pipeline_status_tracker["current_stage"] = "Analyzing Articles"
-        articles_analyzed, _ = _do_entity_extraction(pipeline_id, stop_event)
+        articles_analyzed, _ = _do_entity_extraction(pipeline_id, stop_event, model_type, model_name)
+        print(f"Articles analyzed: {articles_analyzed}")
 
         end_time_iso = datetime.now(timezone.utc).isoformat()
         supabase.table("pipeline_runs").update({"status": "COMPLETED", "end_time": end_time_iso, "details": "All stages completed successfully."}).eq("id", pipeline_id).execute()
@@ -51,7 +50,7 @@ def _run_full_pipeline(pipeline_id, scraper_names, stop_event):
         with status_lock:
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
-            pipeline_status_tracker["current_pipeline_id"] = None # Clear the ID on completion
+            pipeline_status_tracker["current_pipeline_id"] = None
 
 @pipeline_bp.route('/run-full', methods=['POST'])
 def run_full_pipeline_endpoint():
@@ -59,6 +58,15 @@ def run_full_pipeline_endpoint():
         if pipeline_status_tracker["is_running"]:
             return jsonify({"error": f"A process is already running: {pipeline_status_tracker['current_stage']}"}), 409
         
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        scraper_names = data.get('scrapers')
+        # Default to OpenAI if not provided, but allow user to override
+        model_type = data.get('model_type', 'openai')
+        model_name = data.get('model_name', 'gpt-4o')
+
         start_time_iso = datetime.now(timezone.utc).isoformat()
         insert_response = supabase.table("pipeline_runs").insert({"start_time": start_time_iso, "status": "RUNNING"}).execute()
         pipeline_id = insert_response.data[0]['id']
@@ -69,19 +77,10 @@ def run_full_pipeline_endpoint():
             "stop_event": threading.Event()
         })
 
-    # try:
-    scraper_names = request.get_json().get('scrapers')
-    thread = threading.Thread(target=_run_full_pipeline, args=(pipeline_id, scraper_names, pipeline_status_tracker["stop_event"]))
+    thread = threading.Thread(target=_run_full_pipeline, args=(pipeline_id, scraper_names, pipeline_status_tracker["stop_event"], model_type, model_name))
     thread.start()
     return jsonify({"message": "Full pipeline process started in the background.", "pipeline_id": pipeline_id}), 202
-    # except Exception as e:
-    #     with status_lock:
-    #         pipeline_status_tracker["is_running"] = False
-    #         pipeline_status_tracker["current_stage"] = "Idle"
-    #         pipeline_status_tracker["current_pipeline_id"] = None
-    #     return jsonify({"error": "Failed to start the pipeline process", "details": str(e)}), 500
 
-# --- Endpoints to fetch pipeline history & status ---
 
 @pipeline_bp.route('/runs', methods=['GET'])
 def get_all_pipelines():

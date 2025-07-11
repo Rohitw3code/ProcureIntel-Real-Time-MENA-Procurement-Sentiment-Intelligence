@@ -4,7 +4,11 @@ from typing import List, Literal, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
+from flask import Blueprint, jsonify
+from langchain_groq import ChatGroq
 
+
+agent_bp = Blueprint('agent', __name__, url_prefix='/api')
 # This section defines the exact data structure the AI agent should extract.
 
 class CompanySentimentAnalysis(BaseModel):
@@ -52,17 +56,6 @@ class ArticleAnalysis(BaseModel):
         None,
         description="The deadline for bids or the project end date. ONLY extract this if the mode is 'Tender'."
     )
-    
-# --- 2. Set up the Language Model and the Extraction Chain ---
-
-# Initialize the language model we'll use for the analysis.
-llm = ChatOpenAI(model="gpt-4o", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
-
-# Bind the Pydantic model to the LLM to enforce the structured output.
-# This ensures the AI's response will always match the 'ArticleAnalysis' schema.
-structured_llm = llm.with_structured_output(ArticleAnalysis)
-
-# --- 3. Create the Enhanced Prompt ---
 
 prompt = ChatPromptTemplate.from_messages([
     (
@@ -82,6 +75,41 @@ prompt = ChatPromptTemplate.from_messages([
     ("human", "{article_text}")
 ])
 
-# --- 4. Define the Final Extraction Chain ---
-# This chain combines the prompt and the structured LLM to create a reusable analysis tool.
-extraction_chain = prompt | structured_llm
+
+def get_extraction_chain(model_type: str, model_name: str):
+    """
+    Creates and returns a LangChain extraction chain with a dynamically specified provider and model.
+    """
+    model_type = model_type.lower()
+    llm = None
+    
+    if model_type == 'openai':
+        llm = ChatOpenAI(model=model_name, temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+    elif model_type == 'groq':
+        llm = ChatGroq(model_name=model_name, temperature=0, groq_api_key=os.getenv("GROQ_API_KEY"))
+    else:
+        raise ValueError(f"Unsupported model type: '{model_type}'. Supported types are 'openai', 'groq'.")
+    
+    structured_llm = llm.with_structured_output(ArticleAnalysis)
+    return prompt | structured_llm
+
+@agent_bp.route('/models', methods=['GET'])
+def get_available_models():
+    """
+    Provides a list of available model providers and models for analysis.
+    """
+    available_models = {
+        "openai": [
+            "gpt-4o",
+            "gpt-4-turbo",
+            "gpt-3.5-turbo"
+        ],
+        "groq": [
+            "llama3-8b-8192",
+            "llama3-70b-8192",
+            "mixtral-8x7b-32768",
+            "gemma-7b-it"
+        ]
+    }
+    return jsonify(available_models)
+
