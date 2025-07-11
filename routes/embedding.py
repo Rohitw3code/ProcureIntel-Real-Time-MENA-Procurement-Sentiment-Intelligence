@@ -29,6 +29,7 @@ def _do_entity_extraction(stop_event):
                 pipeline_status_tracker["details"]["message"] = "No new articles to analyze."
             return
 
+        # 2. Process each article
         for i, article in enumerate(articles_to_analyze):
             if stop_event.is_set():
                 raise InterruptedError("Pipeline stop requested by user.")
@@ -42,7 +43,7 @@ def _do_entity_extraction(stop_event):
                 analysis_result = extraction_chain.invoke({"article_text": article['cleaned_text']})
 
                 if analysis_result.mode == "Ignore":
-                    supabase.table("scraped_articles").update({"analysis_status": "analyzed"}).eq("id", article['id']).execute()
+                    supabase.table("scraped_articles").update({"analysis_status": "success"}).eq("id", article['id']).execute()
                     total_processed += 1
                     continue
 
@@ -70,7 +71,7 @@ def _do_entity_extraction(stop_event):
                     ]
                     supabase.table("company_analysis").insert(company_records).execute()
 
-                supabase.table("scraped_articles").update({"analysis_status": "analyzed"}).eq("id", article['id']).execute()
+                supabase.table("scraped_articles").update({"analysis_status": "success"}).eq("id", article['id']).execute()
                 total_processed += 1
 
             except Exception as e:
@@ -92,6 +93,7 @@ def _do_entity_extraction(stop_event):
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
 
+# --- API Endpoints to Start and Stop Analysis ---
 @analysis_bp.route('/analyze-articles', methods=['POST'])
 def analyze_articles_endpoint():
     with status_lock:
@@ -112,6 +114,22 @@ def analyze_articles_endpoint():
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
         return jsonify({"error": "Failed to start analysis process", "details": str(e)}), 500
+
+@analysis_bp.route('/stop-analyze-articles', methods=['POST'])
+def stop_analyze_articles_endpoint():
+    """
+    Signals the currently running article analysis process to stop gracefully.
+    """
+    with status_lock:
+        if not pipeline_status_tracker["is_running"] or pipeline_status_tracker["current_stage"] != "Analyzing Articles":
+            return jsonify({"message": "No article analysis process is currently running to stop."}), 404
+        
+        if pipeline_status_tracker["stop_event"]:
+            pipeline_status_tracker["stop_event"].set()
+            pipeline_status_tracker["details"]["message"] = "Stop signal received for article analysis. Shutting down gracefully..."
+        
+    return jsonify({"message": "Article analysis stop signal sent."}), 200
+
 
 def _do_embedding_generation(stop_event):
     total_processed = 0
