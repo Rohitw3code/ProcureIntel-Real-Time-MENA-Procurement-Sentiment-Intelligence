@@ -5,7 +5,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 
-# --- 1. Define the NESTED Structured Data Schema using Pydantic ---
 # This section defines the exact data structure the AI agent should extract.
 
 class CompanySentimentAnalysis(BaseModel):

@@ -6,13 +6,10 @@ from collections import defaultdict
 import json
 import threading
 from datetime import datetime, timezone
-
-# Import the shared status tracker and lock from the new status module
 from .status import pipeline_status_tracker, status_lock
 
 scraper_bp = Blueprint('scraper', __name__, url_prefix='/api')
 
-# --- Background Task for Link Scraping (No changes here) ---
 def _do_link_scraping(scraper_names, pipeline_id, stop_event):
     try:
         scraper_modules = scraper_manager.get_scraper_modules(scraper_names)
@@ -48,7 +45,7 @@ def _do_link_scraping(scraper_names, pipeline_id, stop_event):
             for url, source in all_scraped_urls:
                 url_id = hash_url(url)
                 if url_id not in existing_hashes:
-                    links_to_insert.append({"id": url_id, "url": url, "source": source, "status": "new"})
+                    links_to_insert.append({"id": url_id, "url": url, "source": source, "status": "pending"})
                     scraper_stats[source] += 1
         
         if links_to_insert:
@@ -80,14 +77,13 @@ def _do_link_scraping(scraper_names, pipeline_id, stop_event):
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
 
-# --- UPDATED Background Task for Article Scraping ---
 def _do_article_scraping(stop_event):
     total_scraped = 0
     total_failed = 0
     scraper_stats = defaultdict(int)
     
     try:
-        response = supabase.table("article_links").select("id, url, source").eq("status", "new").execute()
+        response = supabase.table("article_links").select("id, url, source").eq("status", "pending").execute()
         links_to_scrape = response.data
         
         with status_lock:
@@ -132,7 +128,7 @@ def _do_article_scraping(stop_event):
                     "analysis_status": "pending" 
                 }).execute()
 
-                supabase.table("article_links").update({"status": "fetched"}).eq("id", link['id']).execute()
+                supabase.table("article_links").update({"status": "success"}).eq("id", link['id']).execute()
                 
                 scraper_stats[link['source']] += 1
                 total_scraped += 1
@@ -200,3 +196,29 @@ def scrape_articles_endpoint():
             pipeline_status_tracker["is_running"] = False
             pipeline_status_tracker["current_stage"] = "Idle"
         return jsonify({"error": "Failed to start article scraping process", "details": str(e)}), 500
+
+@scraper_bp.route('/scraper-names', methods=['GET'])
+def get_scraper_names():
+    """
+    Returns a list of all available scraper source names.
+    """
+    try:
+        scraper_names = scraper_manager.get_all_scraper_names()
+        return jsonify(scraper_names), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to discover scrapers", "details": str(e)}), 500
+
+@scraper_bp.route('/stop-scrape-articles', methods=['POST'])
+def stop_scrape_articles_endpoint():
+    """
+    Signals the currently running article scraping process to stop gracefully.
+    """
+    with status_lock:
+        if not pipeline_status_tracker["is_running"] or pipeline_status_tracker["current_stage"] != "Scraping Articles":
+            return jsonify({"message": "No article scraping process is currently running to stop."}), 404
+        
+        if pipeline_status_tracker["stop_event"]:
+            pipeline_status_tracker["stop_event"].set()
+            pipeline_status_tracker["details"]["message"] = "Stop signal received for article scraping. Shutting down gracefully..."
+        
+    return jsonify({"message": "Article scraping stop signal sent."}), 200
