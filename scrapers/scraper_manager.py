@@ -75,6 +75,6 @@ def get_scraper_modules(names: Optional[List[str]] = None) -> List[Any]:
         if module:
             selected_modules.append(module)
         else:
-            print(f"Warning: Requested scraper '{name}' not found and will be skipped.")
+            print(f"Warning: Requested scraper '{name}' not found and will be skipped. : ",all_scrapers)
             
     return selected_modules

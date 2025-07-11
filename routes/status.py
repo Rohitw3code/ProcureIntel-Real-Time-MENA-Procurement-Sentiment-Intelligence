@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 # A lock is used to prevent race conditions when updating the state from different threads.
 pipeline_status_tracker = {
     "is_running": False,
+    "current_pipeline_id": None, # <-- NEW: Tracks the ID of the currently running pipeline
     "current_stage": "Idle", # Can be "Finding Links", "Scraping Articles", etc.
     "progress": 0,
     "total": 0,
@@ -22,9 +23,9 @@ status_lock = threading.Lock()
 status_bp = Blueprint('status', __name__, url_prefix='/api')
 
 @status_bp.route('/status', methods=['GET'])
-def get_pipeline_status():
+def get_global_pipeline_status():
     """
-    Returns the current real-time status of the scraping pipeline.
+    Returns the current real-time status of whatever process is running globally.
     """
     with status_lock:
         # Create a copy of the tracker to avoid sending the non-serializable Event object
