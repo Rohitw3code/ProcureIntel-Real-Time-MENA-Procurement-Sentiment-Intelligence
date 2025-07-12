@@ -24,5 +24,9 @@ app.register_blueprint(agent_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(stats_bp)
 
+@app.route('/')
+def index():
+    return "ProcureIntel API is running. Use the endpoints to interact with the system."
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
