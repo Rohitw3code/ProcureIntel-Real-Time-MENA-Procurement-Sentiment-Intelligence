@@ -44,7 +44,6 @@ def get_article_urls():
                     full_url = "https://gulfnews.com" + href
                     article_links.add(full_url)
 
-        print(f"--- Found {len(article_links)} unique article links ---")
         return sorted(list(article_links))
 
     except requests.exceptions.RequestException as e:

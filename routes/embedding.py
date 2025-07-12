@@ -7,6 +7,7 @@ from database import supabase
 from .agent_manager import get_extraction_chain
 from .status import pipeline_status_tracker, status_lock
 from .cost_calculator import calculate_analysis_cost, calculate_embedding_cost
+from .NameMatch import decide
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/api/analysis')
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -59,9 +60,22 @@ def _do_entity_extraction(pipeline_id, stop_event, model_type: str, model_name: 
                     "article_id": article['id'],
                     **analysis_data
                 }).execute()
+
+
                 analysis_id = analysis_insert_res.data[0]['id']
                 if analysis_result.company_sentiments:
-                    company_records = [{"article_analysis_id": analysis_id, **sent.dict()} for sent in analysis_result.company_sentiments]
+                    company_records = []
+                    for sent in analysis_result.company_sentiments:
+                        id_ = decide(sent.company_name.strip())
+
+                        print("company : ", sent.company_name.strip(), "id:", id_)
+                        company_records.append({
+                            "article_analysis_id": analysis_id,
+                            "company_id": id_['id'] if id_ else None,
+                            **sent.dict()
+                        })
+                    
+                    # company_records = [{"article_analysis_id": analysis_id, **sent.dict()} for sent in analysis_result.company_sentiments]
                     supabase.table("company_analysis").insert(company_records).execute()
                 supabase.table("scraped_articles").update({"analysis_status": "success"}).eq("id", article['id']).execute()
 

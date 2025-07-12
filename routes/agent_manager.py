@@ -11,6 +11,7 @@ from langchain_groq import ChatGroq
 agent_bp = Blueprint('agent', __name__, url_prefix='/api')
 # This section defines the exact data structure the AI agent should extract.
 
+
 class CompanySentimentAnalysis(BaseModel):
     """A model to hold the sentiment and risk analysis for a single company mentioned in an article."""
     company_name: str = Field(..., description="The specific name of the company being analyzed.")

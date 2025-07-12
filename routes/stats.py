@@ -181,3 +181,194 @@ def search_companies():
     finally:
         if conn:
             conn.close()
+
+@stats_bp.route('/company-sentiment-summary', methods=['GET'])
+def get_company_sentiment_summary():
+    """
+    GET /api/stats/company-sentiment-summary
+    Provides a summary of sentiment counts for each company.
+    Query Parameters:
+        - name (optional): Filter by company name (case-insensitive, partial match).
+        - risk_type (optional): Filter by risk classification.
+        - mode (optional): Filter by analysis mode ('Tender', 'Sentiment').
+        - order_by (optional): Sort results by 'positive', 'negative', 'neutral', or 'total' count. Defaults to 'total'.
+        - limit (optional): Limit the number of results. Defaults to 10.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    # Optional filters and parameters from query args
+    filters = {
+        'name': request.args.get('name'),
+        'risk_type': request.args.get('risk_type'),
+        'mode': request.args.get('mode')
+    }
+    order_by_param = request.args.get('order_by', 'total').lower()
+    try:
+        limit = int(request.args.get('limit', 3))
+    except ValueError:
+        limit = 10
+    
+    # Whitelist for ordering to prevent SQL injection
+    allowed_ordering = {
+        'positive': 'positive',
+        'negative': 'negative',
+        'neutral': 'neutral',
+        'total': 'total_sentiments'
+    }
+    order_by_column = allowed_ordering.get(order_by_param, 'total_sentiments')
+
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            # Base query to get sentiment counts per company
+            base_sql = """
+                SELECT
+                    ca.company_name,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Positive') as positive,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Negative') as negative,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Neutral') as neutral,
+                    COUNT(ca.sentiment) as total_sentiments
+                FROM company_analysis ca
+                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
+            """
+            
+            where_clauses = []
+            params = {'limit': limit}
+
+            # Dynamically add WHERE clauses for optional filters
+            if filters['name']:
+                where_clauses.append("ca.company_name ILIKE %(company_name)s")
+                params['company_name'] = f"%{filters['name']}%"
+            
+            if filters['risk_type']:
+                where_clauses.append("ca.risk_type = %(risk_type)s")
+                params['risk_type'] = filters['risk_type']
+            
+            if filters['mode']:
+                where_clauses.append("aa.mode = %(mode)s")
+                params['mode'] = filters['mode']
+            
+            if where_clauses:
+                base_sql += " WHERE " + " AND ".join(where_clauses)
+            
+            # Add GROUP BY, ORDER BY, and LIMIT clauses
+            base_sql += f"""
+                GROUP BY ca.company_name
+                ORDER BY {order_by_column} DESC
+                LIMIT %(limit)s;
+            """
+
+            cur.execute(base_sql, params)
+            results = cur.fetchall()
+
+        return jsonify(results), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error during company sentiment summary: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during company sentiment summary: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@stats_bp.route('/tenders', methods=['GET'])
+def get_latest_tenders():
+    """
+    GET /api/stats/tenders
+    Retrieves the latest tender opportunities, ordered by publication date.
+    Query Parameters:
+        - limit (optional): The number of tenders to return. Defaults to 5.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    try:
+        limit = int(request.args.get('limit', 5))
+    except ValueError:
+        return jsonify({"error": "Invalid 'limit' parameter. Must be an integer."}), 400
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            # This query joins article_analysis with scraped_articles to get tender details
+            sql = """
+                SELECT
+                    sa.title,
+                    sa.url,
+                    sa.publication_date,
+                    aa.countries,
+                    aa.commodities,
+                    aa.contract_value,
+                    aa.deadline
+                FROM article_analysis aa
+                JOIN scraped_articles sa ON aa.article_id = sa.id
+                WHERE aa.mode = 'Tender'
+                ORDER BY sa.publication_date DESC
+                LIMIT %(limit)s;
+            """
+            params = {'limit': limit}
+            cur.execute(sql, params)
+            results = cur.fetchall()
+
+        return jsonify(results), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error while fetching tenders: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while fetching tenders: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@stats_bp.route('/companies/shuffled', methods=['GET'])
+def get_shuffled_companies():
+    """
+    GET /api/stats/companies/shuffled
+    Retrieves a random list of 4 distinct company names.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            # Correct: Use subquery to select DISTINCT, then ORDER BY RANDOM()
+            sql = """
+                SELECT DISTINCT ON (company_name) *
+                FROM company_analysis
+                WHERE company_name IN (
+                    SELECT company_name
+                    FROM company_analysis
+                    GROUP BY company_name
+                    ORDER BY RANDOM()
+                    LIMIT 4
+                )
+                ORDER BY company_name, RANDOM();                
+                """
+            cur.execute(sql)
+            results = cur.fetchall()
+
+        return jsonify(results), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error while fetching shuffled companies: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"An unexpected error occurred while fetching shuffled companies: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
