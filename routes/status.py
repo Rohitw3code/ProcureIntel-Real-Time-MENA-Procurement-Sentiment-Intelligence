@@ -3,7 +3,6 @@ import threading
 from datetime import datetime, timezone
 
 # --- Global State for Pipeline Tracking ---
-# This dictionary will be shared across requests to track the pipeline's state.
 # A lock is used to prevent race conditions when updating the state from different threads.
 pipeline_status_tracker = {
     "is_running": False,
@@ -16,7 +15,7 @@ pipeline_status_tracker = {
         "message": "No process is currently running.",
         "scraper_stats": {}
     },
-    "stop_event": None, # Used to signal a graceful shutdown to the running thread
+    "stop_event": None,
 }
 status_lock = threading.Lock()
 

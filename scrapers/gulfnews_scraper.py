@@ -1,7 +1,7 @@
 import requests
 import json
 from bs4 import BeautifulSoup
-from utils import clean_article_text
+from utils.utils import clean_article_text
 import re
 
 # --- Scraper Configuration ---

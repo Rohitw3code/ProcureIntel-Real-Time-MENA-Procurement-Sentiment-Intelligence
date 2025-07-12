@@ -4,6 +4,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_groq import ChatGroq  # Optional: if using Groq
 from CustomSupabaseVectorStore.ArticleVectorStore import ArticleVectorStore
+from database import DB_CONNECTION_STRING
 import os
 
 chat_bp = Blueprint('chat',__name__, url_prefix='/api/chat')
@@ -17,7 +18,6 @@ STATE = {
     "qa_chain": None
 }
 
-DB_CONNECTION_STRING = f"postgresql://postgres:{os.getenv('SUPABASE_DB_PASSWORD')}@{os.getenv('SUPABASE_DB_HOST_CONN')}:{os.getenv('SUPABASE_DB_PORT_CONN')}/postgres"
 
 
 @chat_bp.route('/initialize', methods=['POST'])

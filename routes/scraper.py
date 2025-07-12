@@ -1,6 +1,6 @@
 from flask import jsonify, Blueprint, request
 from scrapers import scraper_manager
-from utils import hash_url
+from utils.utils import hash_url
 from database import supabase
 from collections import defaultdict
 import threading

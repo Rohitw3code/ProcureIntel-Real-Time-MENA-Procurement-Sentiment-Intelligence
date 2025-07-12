@@ -2,7 +2,7 @@
 
 import requests
 from bs4 import BeautifulSoup
-from utils import clean_article_text
+from utils.utils import clean_article_text
 
 # --- Scraper Configuration ---
 SOURCE_NAME = "menabytes.com"
