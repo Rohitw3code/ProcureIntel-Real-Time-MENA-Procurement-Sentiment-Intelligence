@@ -1,7 +1,7 @@
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
-from ArticleVectorStore import ArticleVectorStore
+from CustomSupabaseVectorStore.ArticleVectorStore import ArticleVectorStore
 import os
 
 # --- Configuration ---
