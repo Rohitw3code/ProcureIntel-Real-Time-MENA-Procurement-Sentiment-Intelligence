@@ -126,7 +126,7 @@ def get_article_stats():
         if conn:
             conn.close()
 
-@stats_bp.route('/search/companies', methods=['GET'])
+@stats_bp.route('/search/companies1', methods=['GET'])
 def search_companies():
     """
     GET /api/stats/search/companies
@@ -210,11 +210,11 @@ def search_companies():
             conn.close()
 
 
-@stats_bp.route('/search/companies1', methods=['GET'])
+@stats_bp.route('/search/companies', methods=['GET'])
 def search_companies1():
     """
-    GET /api/stats/search/companies
-    Returns grouped company insights in the desired JSON shape.
+    GET /api/stats/search/companies1
+    Returns grouped company insights with additional commodity, country, contract value, and risk stats.
     """
     if not DB_CONNECTION_STRING:
         logging.error("DATABASE_URL environment variable not set.")
@@ -240,21 +240,22 @@ def search_companies1():
         conn = psycopg2.connect(DB_CONNECTION_STRING)
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             sql = """
-                SELECT
-                    c.id AS company_id,
-                    c.real_name AS company_name,
-                    COUNT(*) AS total_occurrences,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Positive') AS positive_count,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Negative') AS negative_count,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Neutral') AS neutral_count,
-                    ARRAY_AGG(DISTINCT sa.url) AS all_article_urls,
-                    ARRAY_AGG(ca.sentiment) AS all_sentiments,
-                    ARRAY_AGG(ca.reason_for_sentiment) AS all_reasons
-                FROM company_analysis ca
-                JOIN companies c ON ca.company_id = c.id
-                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
-                JOIN scraped_articles sa ON aa.article_id = sa.id
-                WHERE ca.company_id = ANY (%(company_ids)s)
+                WITH base_data AS (
+                    SELECT
+                        c.id AS company_id,
+                        c.real_name AS company_name,
+                        ca.sentiment,
+                        ca.reason_for_sentiment,
+                        sa.url,
+                        unnest(aa.commodities) AS commodity,
+                        unnest(aa.countries) AS country,
+                        aa.contract_value,
+                        ca.risk_type
+                    FROM company_analysis ca
+                    JOIN companies c ON ca.company_id = c.id
+                    JOIN article_analysis aa ON ca.article_analysis_id = aa.id
+                    JOIN scraped_articles sa ON aa.article_id = sa.id
+                    WHERE ca.company_id = ANY (%(company_ids)s)
             """
 
             params = {'company_ids': company_ids}
@@ -274,17 +275,57 @@ def search_companies1():
                 sql += " AND " + " AND ".join(where_clauses)
 
             sql += """
-                GROUP BY c.id
-                ORDER BY array_position(%(company_ids)s, c.id);
+                )
+                SELECT
+                    company_id,
+                    company_name,
+                    COUNT(*) AS total_occurrences,
+                    COUNT(*) FILTER (WHERE sentiment = 'Positive') AS positive_count,
+                    COUNT(*) FILTER (WHERE sentiment = 'Negative') AS negative_count,
+                    COUNT(*) FILTER (WHERE sentiment = 'Neutral') AS neutral_count,
+                    ARRAY_AGG(DISTINCT url) AS all_article_urls,
+                    ARRAY_AGG(reason_for_sentiment) AS all_reasons,
+                    
+                    COUNT(DISTINCT commodity) AS total_unique_commodities,
+                    ARRAY_AGG(commodity) AS all_commodities,
+                    
+                    COUNT(DISTINCT country) AS total_unique_countries,
+                    ARRAY_AGG(country) AS all_countries,
+                    
+                    COUNT(DISTINCT contract_value) AS total_unique_contract_values,
+                    
+                    JSONB_OBJECT_AGG(risk_type, ct) FILTER (WHERE risk_type IS NOT NULL) AS risk_type_counts
+                FROM (
+                    SELECT
+                        *,
+                        COUNT(*) OVER (PARTITION BY risk_type) AS ct
+                    FROM base_data
+                ) sub
+                GROUP BY company_id, company_name
+                ORDER BY array_position(%(company_ids)s, company_id);
             """
 
             cur.execute(sql, params)
             rows = cur.fetchall()
 
-        # 🔑 Reshape each row to desired output
         results = []
         for row in rows:
             summarized_reason = summarize_reasons_with_ai(row["all_reasons"] or [])
+
+            # Get top 3 commodities
+            commodities = [c for c in row["all_commodities"] if c]
+            commodities_count = {}
+            for c in commodities:
+                commodities_count[c] = commodities_count.get(c, 0) + 1
+            top_commodities = sorted(commodities_count.items(), key=lambda x: x[1], reverse=True)[:3]
+
+            # Get top 3 countries
+            countries = [c for c in row["all_countries"] if c]
+            countries_count = {}
+            for c in countries:
+                countries_count[c] = countries_count.get(c, 0) + 1
+            top_countries = sorted(countries_count.items(), key=lambda x: x[1], reverse=True)[:3]
+
             results.append({
                 "company_name": row["company_name"],
                 "sentiments": {
@@ -293,7 +334,19 @@ def search_companies1():
                     "neutral": row["neutral_count"] or 0
                 },
                 "urls": row["all_article_urls"] or [],
-                "reason": summarized_reason
+                "reason": summarized_reason,
+                "commodities": {
+                    "total_unique": row["total_unique_commodities"],
+                    "top_3": [{"name": k, "count": v} for k, v in top_commodities]
+                },
+                "countries": {
+                    "total_unique": row["total_unique_countries"],
+                    "top_3": [{"name": k, "count": v} for k, v in top_countries]
+                },
+                "contract_values": {
+                    "total_unique": row["total_unique_contract_values"]
+                },
+                "risk_types": row["risk_type_counts"] or {}
             })
 
         return jsonify(results), 200
@@ -307,6 +360,8 @@ def search_companies1():
     finally:
         if conn:
             conn.close()
+
+
 
 @stats_bp.route('/company-sentiment-summary', methods=['GET'])
 def get_company_sentiment_summary():
@@ -483,6 +538,141 @@ def get_shuffled_companies():
         return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
     except Exception as e:
         logging.error(f"An unexpected error occurred while fetching shuffled companies: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+
+
+
+
+
+
+
+
+@stats_bp.route('/company/sentiments', methods=['GET'])
+def get_company_sentiments():
+    """
+    GET /api/stats/company/sentiments?company_id=123
+    Returns the real name and all unique sentiment + reason + date for the given company_id.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    company_id = request.args.get('company_id')
+    if not company_id:
+        return jsonify({"error": "The 'company_id' query parameter is required."}), 400
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    c.real_name,
+                    ca.sentiment,
+                    ca.reason_for_sentiment,
+                    DATE(sa.scraped_at) AS sentiment_date
+                FROM company_analysis ca
+                JOIN companies c ON ca.company_id = c.id
+                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
+                JOIN scraped_articles sa ON aa.article_id = sa.id
+                WHERE c.id = %(company_id)s
+                GROUP BY c.real_name, ca.sentiment, ca.reason_for_sentiment, DATE(sa.scraped_at)
+                ORDER BY sentiment_date DESC;
+            """
+
+            cur.execute(sql, {'company_id': company_id})
+            rows = cur.fetchall()
+
+        if not rows:
+            return jsonify({"message": "No sentiments found for the specified company ID."}), 200
+
+        # Structure as: {date: [ {sentiment, reason} ]}
+        timeline = {}
+        for row in rows:
+            date_str = row['sentiment_date'].isoformat()
+            if date_str not in timeline:
+                timeline[date_str] = []
+            timeline[date_str].append({
+                "sentiment": row["sentiment"],
+                "reason": row["reason_for_sentiment"]
+            })
+
+        result = {
+            "company_id": company_id,
+            "real_name": rows[0]["real_name"],
+            "sentiment_timeline": timeline
+        }
+
+        return jsonify(result), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error while fetching company sentiments: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"Unexpected error while fetching company sentiments: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@stats_bp.route('/company/article-count', methods=['GET'])
+def get_company_article_count():
+    """
+    GET /api/stats/company/article-count?company_id=123
+    Returns the real name, total article count, distinct scraped dates, and all unique article IDs for the given company_id.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    company_id = request.args.get('company_id')
+    if not company_id:
+        return jsonify({"error": "The 'company_id' query parameter is required."}), 400
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    c.real_name,
+                    COUNT(DISTINCT sa.id) AS article_count,
+                    ARRAY_AGG(DISTINCT sa.id) AS article_ids,
+                    ARRAY_AGG(DISTINCT DATE(sa.scraped_at)) AS article_dates
+                FROM company_analysis ca
+                JOIN companies c ON ca.company_id = c.id
+                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
+                JOIN scraped_articles sa ON aa.article_id = sa.id
+                WHERE c.id = %(company_id)s
+                GROUP BY c.real_name;
+            """
+
+            cur.execute(sql, {'company_id': company_id})
+            row = cur.fetchone()
+
+        if not row:
+            return jsonify({"message": "No articles found for the specified company ID."}), 200
+
+        result = {
+            "company_id": company_id,
+            "real_name": row["real_name"],
+            "article_count": row["article_count"],
+            "article_ids": sorted(row["article_ids"]) if row["article_ids"] else [],
+            "article_dates": sorted([date.isoformat() for date in row["article_dates"]]) if row["article_dates"] else []
+        }
+
+        return jsonify(result), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error while fetching company article count: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"Unexpected error while fetching company article count: {e}")
         return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
     finally:
         if conn:

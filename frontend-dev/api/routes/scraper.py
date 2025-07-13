@@ -53,6 +53,7 @@ def _do_link_scraping(pipeline_id, scraper_names, stop_event):
             new_links_for_source = [{"id": hash_url(url), "url": url, "source": source_name, "status": "pending"} for url in urls if hash_url(url) not in existing_hashes]
             
             if new_links_for_source:
+                print("Source:", source_name, "Found new links:", len(new_links_for_source))
                 supabase.table("article_links").insert(new_links_for_source).execute()
                 num_found = len(new_links_for_source)
                 total_new_links_found += num_found
