@@ -5,39 +5,6 @@ from database import DB_CONNECTION_STRING
 from psycopg2 import extras
 import logging
 from .search import search_similar_companies
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-
-# Example: Use your same OpenAI key or env vars
-llm = ChatOpenAI(model="gpt-4o-mini")  # Or your preferred model
-
-reason_summary_prompt = ChatPromptTemplate.from_template(
-    """
-    You are an assistant. Combine these multiple reasons into a single clear, concise summary for a sentiment analysis report.
-    
-    Reasons:
-    {reasons}
-    
-    Provide a clear, short summary.
-    """
-)
-
-def summarize_reasons_with_ai(reasons: list[str]) -> str:
-    cleaned = [r.strip() for r in reasons if r and r.strip()]
-    if not cleaned:
-        return ""
-    if len(cleaned) == 1:
-        return cleaned[0]
-
-    # Create the final prompt
-    prompt = reason_summary_prompt.format_messages(reasons="\n".join(cleaned))
-
-    # Call LLM
-    response = llm.invoke(prompt)
-
-    # Return just the text
-    return response.content.strip()
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -192,117 +159,19 @@ def search_companies():
                     sql += f" AND {table_alias}.{key} = %({key})s"
                     params[key] = value
 
-            sql += " ORDER BY sa.publication_date DESC;"
-
+            sql += """
+                ORDER BY array_position(%(company_ids)s, ca.company_id);
+            """
             cur.execute(sql, params)
             results = cur.fetchall()
 
-        return jsonify(results), 200
+            return jsonify(results), 200
 
     except psycopg2.Error as e:
         logging.error(f"Database error during company search: {e}")
         return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
     except Exception as e:
         logging.error(f"An unexpected error occurred during company search: {e}")
-        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
-    finally:
-        if conn:
-            conn.close()
-
-
-@stats_bp.route('/search/companies1', methods=['GET'])
-def search_companies1():
-    """
-    GET /api/stats/search/companies
-    Returns grouped company insights in the desired JSON shape.
-    """
-    if not DB_CONNECTION_STRING:
-        logging.error("DATABASE_URL environment variable not set.")
-        return jsonify({"error": "Database connection string is not configured."}), 500
-
-    company_name = request.args.get('name')
-    if not company_name:
-        return jsonify({"error": "The 'name' query parameter is required."}), 400
-
-    company_ids = search_similar_companies(company_name)
-
-    if not company_ids:
-        return jsonify({"message": "No similar companies found."}), 200
-
-    filters = {
-        'sentiment': request.args.get('sentiment'),
-        'risk_type': request.args.get('risk_type'),
-        'mode': request.args.get('mode')
-    }
-
-    conn = None
-    try:
-        conn = psycopg2.connect(DB_CONNECTION_STRING)
-        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            sql = """
-                SELECT
-                    c.id AS company_id,
-                    c.real_name AS company_name,
-                    COUNT(*) AS total_occurrences,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Positive') AS positive_count,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Negative') AS negative_count,
-                    COUNT(*) FILTER (WHERE ca.sentiment = 'Neutral') AS neutral_count,
-                    ARRAY_AGG(DISTINCT sa.url) AS all_article_urls,
-                    ARRAY_AGG(ca.sentiment) AS all_sentiments,
-                    ARRAY_AGG(ca.reason_for_sentiment) AS all_reasons
-                FROM company_analysis ca
-                JOIN companies c ON ca.company_id = c.id
-                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
-                JOIN scraped_articles sa ON aa.article_id = sa.id
-                WHERE ca.company_id = ANY (%(company_ids)s)
-            """
-
-            params = {'company_ids': company_ids}
-
-            where_clauses = []
-
-            for key, value in filters.items():
-                if value:
-                    if key in ['sentiment', 'risk_type']:
-                        table_alias = 'ca'
-                    else:
-                        table_alias = 'aa'
-                    where_clauses.append(f"{table_alias}.{key} = %({key})s")
-                    params[key] = value
-
-            if where_clauses:
-                sql += " AND " + " AND ".join(where_clauses)
-
-            sql += """
-                GROUP BY c.id
-                ORDER BY array_position(%(company_ids)s, c.id);
-            """
-
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-
-        # 🔑 Reshape each row to desired output
-        results = []
-        for row in rows:
-            summarized_reason = summarize_reasons_with_ai(row["all_reasons"] or [])
-            results.append({
-                "company_name": row["company_name"],
-                "sentiments": {
-                    "positive": row["positive_count"] or 0,
-                    "negative": row["negative_count"] or 0,
-                    "neutral": row["neutral_count"] or 0
-                },
-                "urls": row["all_article_urls"] or [],
-                "reason": summarized_reason
-            })
-
-        return jsonify(results), 200
-
-    except psycopg2.Error as e:
-        logging.error(f"Database error during grouped company search: {e}")
-        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
-    except Exception as e:
-        logging.error(f"An unexpected error occurred during grouped company search: {e}")
         return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
     finally:
         if conn:
