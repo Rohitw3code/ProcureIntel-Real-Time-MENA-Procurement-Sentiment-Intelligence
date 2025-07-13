@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify,request
 from database import DB_CONNECTION_STRING
 from psycopg2 import extras
 import logging
+from .search import search_similar_companies
 
 logging.basicConfig(level=logging.INFO)
 
@@ -12,11 +13,8 @@ stats_bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 @stats_bp.route('/insights', methods=['GET'])
 def get_article_stats():
     """
-    GET /api/stats/articles
+    GET /api/stats/insights
     Returns various statistics about the scraped and analyzed articles.
-    
-    This version uses a single, efficient SQL query via psycopg2 to fetch all stats
-    at once, avoiding loops and multiple round trips to the database.
     """
     if not DB_CONNECTION_STRING:
         logging.error("DATABASE_URL environment variable not set.")
@@ -24,10 +22,7 @@ def get_article_stats():
 
     conn = None
     try:
-        # Establish the database connection
         conn = psycopg2.connect(DB_CONNECTION_STRING)
-        
-        # Use a cursor to execute the query as requested
         with conn.cursor() as cur:
             sql = """
                 WITH scraped_count AS (
@@ -40,7 +35,7 @@ def get_article_stats():
                     SELECT COUNT(*) as total FROM article_analysis WHERE mode = 'Tender'
                 ),
                 company_count AS (
-                    SELECT COUNT(DISTINCT company_name) as total FROM company_analysis
+                    SELECT COUNT(*) as total FROM companies
                 ),
                 country_count AS (
                     SELECT COUNT(DISTINCT unnest) as total FROM article_analysis, unnest(countries)
@@ -67,13 +62,11 @@ def get_article_stats():
                     (SELECT neutral FROM sentiment_counts) as neutral_sentiments;
             """
             cur.execute(sql)
-            # Fetch the single result row
             result = cur.fetchone()
 
         if not result:
-             return jsonify({"message": "No statistics found. The tables might be empty."}), 200
+            return jsonify({"message": "No statistics found. The tables might be empty."}), 200
 
-        # Map the result tuple to the desired JSON structure, handling NULLs by defaulting to 0
         stats = {
             "total_data_news_articles_scraped": result[0] or 0,
             "articles_analyzed": result[1] or 0,
@@ -97,7 +90,6 @@ def get_article_stats():
         logging.error(f"An unexpected error occurred: {e}")
         return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
     finally:
-        # Ensure the connection is always closed
         if conn:
             conn.close()
 
@@ -105,9 +97,9 @@ def get_article_stats():
 def search_companies():
     """
     GET /api/stats/search/companies
-    Searches for companies by name with optional filters.
+    Searches for companies by similarity-matched IDs with optional filters.
     Query Parameters:
-        - name (required): The company name to search for (case-insensitive, partial match).
+        - name (required): The company name to search for (used for similarity match).
         - sentiment (optional): Filter by sentiment ('Positive', 'Negative', 'Neutral').
         - risk_type (optional): Filter by risk classification.
         - mode (optional): Filter by analysis mode ('Tender', 'Sentiment').
@@ -120,57 +112,60 @@ def search_companies():
     if not company_name:
         return jsonify({"error": "The 'name' query parameter is required."}), 400
 
-    # Optional filters from query parameters
+    # Get matching company IDs using your vector store
+    company_ids = search_similar_companies(company_name)
+
+    if not company_ids:
+        return jsonify({"message": "No similar companies found."}), 200
+
     filters = {
         'sentiment': request.args.get('sentiment'),
         'risk_type': request.args.get('risk_type'),
         'mode': request.args.get('mode')
     }
 
+    print(company_ids)
+
     conn = None
     try:
         conn = psycopg2.connect(DB_CONNECTION_STRING)
-        # Using RealDictCursor to get results as dictionaries directly
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            # Base query joins the necessary tables
-            base_sql = """
+            sql = """
                 SELECT
-                    ca.company_name,
+                    c.real_name AS company_name,
                     ca.sentiment,
                     ca.risk_type,
                     ca.reason_for_sentiment,
                     aa.mode,
                     aa.countries,
                     aa.commodities,
-                    sa.title as article_title,
-                    sa.url as article_url,
+                    sa.title AS article_title,
+                    sa.url AS article_url,
                     sa.publication_date
                 FROM company_analysis ca
+                JOIN companies c ON ca.company_id = c.id
                 JOIN article_analysis aa ON ca.article_analysis_id = aa.id
                 JOIN scraped_articles sa ON aa.article_id = sa.id
-                WHERE ca.company_name ILIKE %(company_name)s
+                WHERE ca.company_id = ANY (%(company_ids)s)
             """
-            
-            params = {'company_name': f'%{company_name}%'}
-            
-            # Dynamically add WHERE clauses for optional filters
+            params = {'company_ids': company_ids}
+
             for key, value in filters.items():
                 if value:
-                    # Determine the table alias for the column
                     if key in ['sentiment', 'risk_type']:
                         table_alias = 'ca'
-                    else: # mode
+                    else:
                         table_alias = 'aa'
-                    
-                    base_sql += f" AND {table_alias}.{key} = %({key})s"
+                    sql += f" AND {table_alias}.{key} = %({key})s"
                     params[key] = value
 
-            base_sql += " ORDER BY sa.publication_date DESC;"
-
-            cur.execute(base_sql, params)
+            sql += """
+                ORDER BY array_position(%(company_ids)s, ca.company_id);
+            """
+            cur.execute(sql, params)
             results = cur.fetchall()
 
-        return jsonify(results), 200
+            return jsonify(results), 200
 
     except psycopg2.Error as e:
         logging.error(f"Database error during company search: {e}")
@@ -186,19 +181,12 @@ def search_companies():
 def get_company_sentiment_summary():
     """
     GET /api/stats/company-sentiment-summary
-    Provides a summary of sentiment counts for each company.
-    Query Parameters:
-        - name (optional): Filter by company name (case-insensitive, partial match).
-        - risk_type (optional): Filter by risk classification.
-        - mode (optional): Filter by analysis mode ('Tender', 'Sentiment').
-        - order_by (optional): Sort results by 'positive', 'negative', 'neutral', or 'total' count. Defaults to 'total'.
-        - limit (optional): Limit the number of results. Defaults to 10.
+    Provides a summary of sentiment counts for each company using the companies table.
     """
     if not DB_CONNECTION_STRING:
         logging.error("DATABASE_URL environment variable not set.")
         return jsonify({"error": "Database connection string is not configured."}), 500
 
-    # Optional filters and parameters from query args
     filters = {
         'name': request.args.get('name'),
         'risk_type': request.args.get('risk_type'),
@@ -206,11 +194,10 @@ def get_company_sentiment_summary():
     }
     order_by_param = request.args.get('order_by', 'total').lower()
     try:
-        limit = int(request.args.get('limit', 3))
+        limit = int(request.args.get('limit', 10))
     except ValueError:
         limit = 10
-    
-    # Whitelist for ordering to prevent SQL injection
+
     allowed_ordering = {
         'positive': 'positive',
         'negative': 'negative',
@@ -219,50 +206,47 @@ def get_company_sentiment_summary():
     }
     order_by_column = allowed_ordering.get(order_by_param, 'total_sentiments')
 
-
     conn = None
     try:
         conn = psycopg2.connect(DB_CONNECTION_STRING)
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            # Base query to get sentiment counts per company
-            base_sql = """
+            sql = """
                 SELECT
-                    ca.company_name,
-                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Positive') as positive,
-                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Negative') as negative,
-                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Neutral') as neutral,
-                    COUNT(ca.sentiment) as total_sentiments
+                    c.real_name AS company_name,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Positive') AS positive,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Negative') AS negative,
+                    COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Neutral') AS neutral,
+                    COUNT(ca.sentiment) AS total_sentiments
                 FROM company_analysis ca
+                JOIN companies c ON ca.company_id = c.id
                 JOIN article_analysis aa ON ca.article_analysis_id = aa.id
             """
-            
+
             where_clauses = []
             params = {'limit': limit}
 
-            # Dynamically add WHERE clauses for optional filters
             if filters['name']:
-                where_clauses.append("ca.company_name ILIKE %(company_name)s")
+                where_clauses.append("c.real_name ILIKE %(company_name)s")
                 params['company_name'] = f"%{filters['name']}%"
-            
+
             if filters['risk_type']:
                 where_clauses.append("ca.risk_type = %(risk_type)s")
                 params['risk_type'] = filters['risk_type']
-            
+
             if filters['mode']:
                 where_clauses.append("aa.mode = %(mode)s")
                 params['mode'] = filters['mode']
-            
+
             if where_clauses:
-                base_sql += " WHERE " + " AND ".join(where_clauses)
-            
-            # Add GROUP BY, ORDER BY, and LIMIT clauses
-            base_sql += f"""
-                GROUP BY ca.company_name
+                sql += " WHERE " + " AND ".join(where_clauses)
+
+            sql += f"""
+                GROUP BY c.real_name
                 ORDER BY {order_by_column} DESC
                 LIMIT %(limit)s;
             """
 
-            cur.execute(base_sql, params)
+            cur.execute(sql, params)
             results = cur.fetchall()
 
         return jsonify(results), 200

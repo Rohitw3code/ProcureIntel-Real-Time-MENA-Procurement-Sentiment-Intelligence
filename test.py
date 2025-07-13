@@ -41,7 +41,7 @@ if similar_companies:
     for doc in similar_companies:
         # The company name is in 'page_content'
         # The distance score is in the metadata
-        print("doc : ",doc)
+        id_ = doc.metadata.get('id', 'N/A')
         company_name = doc.page_content
         distance = doc.metadata.get('distance', 'N/A')
         print(f"- Name: {company_name:<30} | Distance: {distance:.4f}")
