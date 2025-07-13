@@ -66,6 +66,7 @@ def get_scraper_modules(names: Optional[List[str]] = None) -> List[Any]:
         A list of the requested scraper module objects.
     """
     all_scrapers = discover_scrapers()
+    print(f"Available scrapers: {list(all_scrapers.keys())}")
     if names is None:
         return list(all_scrapers.values())
 
@@ -78,3 +79,4 @@ def get_scraper_modules(names: Optional[List[str]] = None) -> List[Any]:
             print(f"Warning: Requested scraper '{name}' not found and will be skipped. : ",all_scrapers)
             
     return selected_modules
+

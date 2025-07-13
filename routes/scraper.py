@@ -32,11 +32,14 @@ def _do_link_scraping(pipeline_id, scraper_names, stop_event):
         pipeline_status_tracker["total"] = len(scraper_modules)
         pipeline_status_tracker["progress"] = 0
 
+    print(f"Running link scraper for {len(scraper_modules)} scrapers: {', '.join([module.SOURCE_NAME for module in scraper_modules])}")
+
     for i, module in enumerate(scraper_modules):
         if stop_event.is_set():
             raise InterruptedError("Pipeline stop requested by user.")
         
         source_name = module.SOURCE_NAME
+        print(f"Running link scraper for: {source_name}")
         with status_lock:
             pipeline_status_tracker["progress"] = i + 1
             pipeline_status_tracker["details"]["message"] = f"Running link scraper for: {source_name}"
@@ -51,6 +54,8 @@ def _do_link_scraping(pipeline_id, scraper_names, stop_event):
             existing_hashes = {item['id'] for item in response.data}
             
             new_links_for_source = [{"id": hash_url(url), "url": url, "source": source_name, "status": "pending"} for url in urls if hash_url(url) not in existing_hashes]
+
+            print(f"Source: {source_name}, Found new links: {len(new_links_for_source)}")
             
             if new_links_for_source:
                 supabase.table("article_links").insert(new_links_for_source).execute()
@@ -107,16 +112,37 @@ def _do_article_scraping(pipeline_id, stop_event):
         
         try:
             content_data = scraper_module.scrape_article_content(link['url'])
-            supabase.table("scraped_articles").insert({
-                "link_id": link['id'], "source": link['source'], "url": content_data.get('url'), "title": content_data.get('title'), 
-                "author": content_data.get('author'), "publication_date": content_data.get('publication_date'),
-                "raw_text": content_data.get('raw_text'), "cleaned_text": content_data.get('cleaned_text'),
-                "embedding_status": "pending", "analysis_status": "pending" 
-            }).execute()
-            supabase.table("article_links").update({"status": "success"}).eq("id", link['id']).execute()
-            
+
+            # Make sure content_data is not None
+            if not content_data:
+                print(f"Scraping failed for URL: {link['url']}")
+                supabase.table("article_links").update({"status": "failed"}).eq("id", link['id']).execute()
+            else:
+                # Clean up fields: replace "N/A" or None with NULL-friendly values
+                def clean_field(value):
+                    if value is None or str(value).strip().upper() == "N/A":
+                        return None
+                    return value
+
+                cleaned_content = {
+                    "link_id": link['id'],
+                    "source": link['source'],
+                    "url": clean_field(content_data.get('url')),
+                    "title": clean_field(content_data.get('title')),
+                    "author": clean_field(content_data.get('author')),
+                    "publication_date": clean_field(content_data.get('publication_date')),
+                    "raw_text": clean_field(content_data.get('raw_text')),
+                    "cleaned_text": clean_field(content_data.get('cleaned_text')),
+                    "embedding_status": "pending",
+                    "analysis_status": "pending"
+                }
+
+                print("publication date:", cleaned_content['publication_date'])
+
+                supabase.table("scraped_articles").insert(cleaned_content).execute()
+                supabase.table("article_links").update({"status": "success"}).eq("id", link['id']).execute()        
+
             total_scraped += 1
-            # Increment the counter by reading and then writing the new value
             run_res = supabase.table("pipeline_runs").select("articles_scraped").eq("id", pipeline_id).single().execute()
             current_count = run_res.data.get("articles_scraped", 0) or 0
             supabase.table("pipeline_runs").update({"articles_scraped": current_count + 1}).eq("id", pipeline_id).execute()

@@ -327,6 +327,7 @@ def search_companies1():
             top_countries = sorted(countries_count.items(), key=lambda x: x[1], reverse=True)[:3]
 
             results.append({
+                "company_id": row["company_id"],
                 "company_name": row["company_name"],
                 "sentiments": {
                     "positive": row["positive_count"] or 0,
