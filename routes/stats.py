@@ -4,12 +4,19 @@ from flask import Blueprint, jsonify,request
 from database import DB_CONNECTION_STRING
 from psycopg2 import extras
 import logging
-from .search import search_similar_companies
+from .search import search_similar_companies,search_articles,search_tenders
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from groq import Groq
+
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Example: Use your same OpenAI key or env vars
 llm = ChatOpenAI(model="gpt-4o-mini")  # Or your preferred model
+
+# Init Groq client
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 reason_summary_prompt = ChatPromptTemplate.from_template(
     """
@@ -21,6 +28,26 @@ reason_summary_prompt = ChatPromptTemplate.from_template(
     Provide a clear, short summary.
     """
 )
+
+def summarize_with_groq(description: str) -> str:
+    """
+    Uses Groq's LLM to summarize the given description.
+    """
+    response = groq_client.chat.completions.create(
+        model="llama3-70b-8192",  # or any Groq-supported model
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. Write a short, clear summary that is easy for a user to read."
+            },
+            {
+                "role": "user",
+                "content": f"Summarize this article:\n\n{description} only return summarized data no extra text"
+            }
+        ]
+    )
+    return response.choices[0].message.content.strip()
+
 
 def summarize_reasons_with_ai(reasons: list[str]) -> str:
     cleaned = [r.strip() for r in reasons if r and r.strip()]
@@ -34,6 +61,8 @@ def summarize_reasons_with_ai(reasons: list[str]) -> str:
 
     # Call LLM
     response = llm.invoke(prompt)
+
+    print("summarizing.....")
 
     # Return just the text
     return response.content.strip()
@@ -209,6 +238,49 @@ def search_companies():
         if conn:
             conn.close()
 
+@stats_bp.route('/search/tender', methods=['GET'])
+def search_tender():
+    """
+    GET /api/stats/search/tender
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    query = request.args.get('query')
+    k = request.args.get('k')
+    if not query:
+        return jsonify({"error": "The 'query' parameter is required."}), 400
+
+    article_id = search_tenders(query=query, k=k)  # your search logic
+
+    conn = psycopg2.connect(DB_CONNECTION_STRING)
+    with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+        sql = """
+            SELECT 
+            sa.url,
+            sa.cleaned_text,
+            sa.source,
+            aa.mode AS analysis_mode,
+            aa.countries,
+            aa.commodities,
+            aa.contract_value,
+            aa.deadline
+            FROM 
+            scraped_articles sa
+            LEFT JOIN 
+            article_analysis aa ON sa.id = aa.article_id
+            WHERE 
+            sa.id = ANY(%s)
+        """
+        cur.execute(sql, (article_id,))
+        result = cur.fetchall()
+    conn.close()
+    return jsonify(result)
+
+
+
+
 
 @stats_bp.route('/search/companies', methods=['GET'])
 def search_companies1():
@@ -310,7 +382,9 @@ def search_companies1():
 
         results = []
         for row in rows:
-            summarized_reason = summarize_reasons_with_ai(row["all_reasons"] or [])
+            # summarized_reason = summarize_reasons_with_ai(row["all_reasons"] or [])
+            if row["all_reasons"]:
+                summarized_reason = row["all_reasons"][0]+"....read more"
 
             # Get top 3 commodities
             commodities = [c for c in row["all_commodities"] if c]
@@ -399,6 +473,7 @@ def get_company_sentiment_summary():
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             sql = """
                 SELECT
+                    c.id as company_id,
                     c.real_name AS company_name,
                     COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Positive') AS positive,
                     COUNT(ca.sentiment) FILTER (WHERE ca.sentiment = 'Negative') AS negative,
@@ -428,7 +503,7 @@ def get_company_sentiment_summary():
                 sql += " WHERE " + " AND ".join(where_clauses)
 
             sql += f"""
-                GROUP BY c.real_name
+                GROUP BY c.id
                 ORDER BY {order_by_column} DESC
                 LIMIT %(limit)s;
             """
@@ -678,3 +753,143 @@ def get_company_article_count():
     finally:
         if conn:
             conn.close()
+
+@stats_bp.route('/risk-factors/counts', methods=['GET'])
+def get_risk_factors_counts_all_dates():
+    """
+    GET /api/stats/risk-factors/counts?company_id=123
+    Returns the count of each risk_type grouped by date (scraped_at date).
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    company_id = request.args.get('company_id')
+
+    conn = None
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            sql = """
+                SELECT
+                    DATE(sa.scraped_at) AS date,
+                    ca.risk_type,
+                    COUNT(*) AS count
+                FROM company_analysis ca
+                JOIN article_analysis aa ON ca.article_analysis_id = aa.id
+                JOIN scraped_articles sa ON aa.article_id = sa.id
+                WHERE ca.risk_type IS NOT NULL
+            """
+
+            params = {}
+
+            if company_id:
+                sql += " AND ca.company_id = %(company_id)s"
+                params['company_id'] = company_id
+
+            sql += """
+                GROUP BY date, ca.risk_type
+                ORDER BY date DESC, ca.risk_type;
+            """
+
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+        # Organize output: {date: {risk_type: count}}
+        date_risk_counts = {}
+        for row in rows:
+            date_key = row["date"].isoformat()
+            if date_key not in date_risk_counts:
+                date_risk_counts[date_key] = {}
+            date_risk_counts[date_key][row["risk_type"]] = row["count"]
+
+        return jsonify({
+            "company_id": company_id,
+            "risk_counts_by_date": date_risk_counts
+        }), 200
+
+    except psycopg2.Error as e:
+        logging.error(f"Database error while fetching risk factor counts: {e}")
+        return jsonify({"error": "A database error occurred.", "details": str(e)}), 500
+    except Exception as e:
+        logging.error(f"Unexpected error while fetching risk factor counts: {e}")
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@stats_bp.route('/search/articles', methods=['GET'])
+def search_news_articles():
+    """
+    Searches for articles similar to the given query using the ArticleVectorStore.
+    Returns article details: id, title, author, url, description, publication_date.
+    """
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    query = request.args.get('query')
+    k = int(request.args.get('k', 4))
+
+    # Vector search — returns list of IDs
+    article_ids = search_articles(query, k)
+
+    if not article_ids:
+        return jsonify([])
+
+    # Connect to DB
+    conn = psycopg2.connect(DB_CONNECTION_STRING)
+    with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+        sql = """
+            SELECT 
+                id,
+                title,
+                author,
+                url,
+                cleaned_text AS description,
+                publication_date
+            FROM 
+                scraped_articles
+            WHERE 
+                id = ANY(%s)
+        """
+        cur.execute(sql, (article_ids,))
+        rows = cur.fetchall()
+
+    # Close the connection
+    conn.close()
+
+    # Format the dates as ISO strings
+    for row in rows:
+        if row['publication_date']:
+            row['publication_date'] = row['publication_date'].isoformat()
+
+    return jsonify(rows)
+
+
+@stats_bp.route('/summarize/article', methods=['POST'])
+def summarize_article():
+    """
+    Accepts a JSON payload with 'description' and returns an easy-to-read summary.
+    Expects:
+    {
+      "description": "Full cleaned article text..."
+    }
+    """
+    try:
+        data = request.get_json()
+        description = data.get("description")
+
+        if not description:
+            return jsonify({"error": "Missing 'description' field."}), 400
+
+        # Run your real summarizer here
+        summary = summarize_with_groq(description)
+
+        return jsonify({
+            "summary": summary
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
