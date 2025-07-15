@@ -140,15 +140,6 @@ Custom Vector Stores (Similarity Search)
 Sentiment Analysis Models
 ```
 
-### **Infrastructure & DevOps**
-```yaml
-# Production-Ready Infrastructure
-Docker (Containerization)
-Nginx (Reverse Proxy)
-Supabase (Backend as a Service)
-Netlify (Frontend Deployment)
-GitHub Actions (CI/CD)
-```
 
 ---
 
@@ -1167,6 +1158,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Made with ❤️ for the MENA Procurement Community**
+**Made with ❤️ Rohit Kumar**
 
 </div>
