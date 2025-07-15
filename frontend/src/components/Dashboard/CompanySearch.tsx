@@ -178,7 +178,6 @@ export const CompanySearch: React.FC<CompanySearchProps> = ({
                   <div className="flex items-center space-x-2">
                     <Search className="h-5 w-5 text-emerald-600" />
                     <div className="hidden sm:block w-px h-5 bg-gray-300"></div>
-                    <Brain className="hidden sm:block h-4 w-4 text-blue-600" />
                   </div>
                 </div>
                 
