@@ -49,7 +49,7 @@
 
 In the rapidly evolving MENA procurement landscape, staying ahead requires more than traditional methods. ProcureIntel leverages advanced AI technologies to provide:
 
-- **Real-time Intelligence**: Continuous monitoring of 1000+ MENA news sources
+- **Real-time Intelligence**: Continuous monitoring of 10+ MENA news sources
 - **AI-Powered Analysis**: Advanced NLP for sentiment analysis and entity extraction
 - **Smart Discovery**: Automated tender detection with contract value extraction
 - **Interactive Insights**: Natural language querying of procurement data
@@ -167,7 +167,7 @@ Git
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/procureintel.git
+git clone https://github.com/Rohitw3code/ProcureIntel-Real-Time-MENA-Procurement-Sentiment-Intelligence
 cd procureintel
 ```
 
@@ -184,20 +184,7 @@ cp .env.example .env
 # Add your API keys and database credentials
 ```
 
-### 3. Database Setup
-
-```sql
--- Connect to your Supabase/PostgreSQL instance
-psql -h your-db-host -U your-username -d your-database
-
--- Run the schema setup
-\i api/tables.sql
-
--- Enable vector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-### 4. Install Dependencies
+### 3. Install Dependencies
 
 ```bash
 # Frontend Dependencies
@@ -988,18 +975,6 @@ LOG_LEVEL=INFO
 
 ## 📖 API Documentation
 
-### **Authentication**
-
-```bash
-# Get access token
-curl -X POST https://api.procureintel.com/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "user", "password": "pass"}'
-
-# Use token in requests
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://api.procureintel.com/api/stats/insights
-```
 
 ### **Core Endpoints**
 
@@ -1187,22 +1162,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **React Team** for the amazing frontend framework
 - **MENA Business Community** for inspiration and feedback
 
----
-
-## 📞 Support & Contact
-
-- **Documentation**: [docs.procureintel.com](https://docs.procureintel.com)
-- **Issues**: [GitHub Issues](https://github.com/your-org/procureintel/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/procureintel/discussions)
-- **Email**: support@procureintel.com
-- **Twitter**: [@ProcureIntel](https://twitter.com/procureintel)
 
 ---
 
 <div align="center">
 
 **Made with ❤️ for the MENA Procurement Community**
-
-[⭐ Star us on GitHub](https://github.com/your-org/procureintel) • [🐛 Report Bug](https://github.com/your-org/procureintel/issues) • [💡 Request Feature](https://github.com/your-org/procureintel/issues)
 
 </div>

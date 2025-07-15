@@ -25,18 +25,23 @@ export const DeveloperPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchInitialData();
-    const interval = setInterval(fetchGlobalStatus, 1000); // Poll every 1 second for more responsive UI
-    return () => clearInterval(interval);
-  }, []);
+    if (isAuthenticated) {
+      fetchInitialData();
+      const interval = setInterval(fetchGlobalStatus, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (selectedPipelineId) {
+    if (isAuthenticated && selectedPipelineId) {
       fetchPipelineStatus(selectedPipelineId);
     }
-  }, [selectedPipelineId]);
+  }, [isAuthenticated, selectedPipelineId]);
 
   const fetchInitialData = async () => {
     try {
@@ -61,9 +66,7 @@ export const DeveloperPage: React.FC = () => {
       const status = await devApi.getGlobalStatus();
       setGlobalStatus(status);
       
-      // If pipeline was stopped, refresh the pipeline runs list
       if (status.current_stage === 'Idle' && !status.is_running) {
-        // Refresh pipeline runs to get the latest data
         const runs = await devApi.getAllPipelineRuns();
         setPipelineRuns(runs);
       }
@@ -81,7 +84,6 @@ export const DeveloperPage: React.FC = () => {
     }
   };
 
-  // Handler functions
   const handleScraperToggle = (scraper: string) => {
     setSelectedScrapers(prev => 
       prev.includes(scraper) 
@@ -216,7 +218,6 @@ export const DeveloperPage: React.FC = () => {
       const response = await devApi.stopPipeline();
       setSuccess(response.message);
       
-      // Immediately update the global status to show stopping state
       if (globalStatus) {
         setGlobalStatus({
           ...globalStatus,
@@ -228,12 +229,10 @@ export const DeveloperPage: React.FC = () => {
         });
       }
       
-      // Force refresh global status after a short delay
       setTimeout(() => {
         fetchGlobalStatus();
       }, 1000);
       
-      // Refresh again after 3 seconds to ensure we get the final state
       setTimeout(() => {
         fetchGlobalStatus();
       }, 3000);
@@ -242,6 +241,16 @@ export const DeveloperPage: React.FC = () => {
       setError('Failed to stop pipeline');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === 'dev123') {
+      setIsAuthenticated(true);
+      setPasswordError(null);
+    } else {
+      setPasswordError('Incorrect password');
     }
   };
 
@@ -313,6 +322,52 @@ export const DeveloperPage: React.FC = () => {
         return null;
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 flex items-center justify-center p-4">
+        <div className="bg-white bg-opacity-90 backdrop-blur-lg p-8 rounded-2xl shadow-xl w-full max-w-md transform transition-all duration-300 hover:scale-105">
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-6 text-center tracking-tight">Secure Access</h2>
+          <form onSubmit={handlePasswordSubmit}>
+            <div className="mb-6">
+              <div className="relative">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                  placeholder="Enter your password"
+                />
+                <svg
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 11c0-1.104-.896-2-2-2s-2 .896-2 2 2 4 2 4 2-2.896 2-4zm0 0c0 1.104.896 2 2 2s2-.896 2-2-2-4-2-4-2 2.896-2 4zm7-7H5c-1.104 0-2 .896-2 2v12c0 1.104.896 2 2 2h14c1.104 0 2-.896 2-2V6c0-1.104-.896-2-2-2z"
+                  />
+                </svg>
+              </div>
+              {passwordError && (
+                <p className="text-red-500 text-sm mt-2 font-medium animate-pulse">{passwordError}</p>
+              )}
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300"
+            >
+              Unlock Dashboard
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
