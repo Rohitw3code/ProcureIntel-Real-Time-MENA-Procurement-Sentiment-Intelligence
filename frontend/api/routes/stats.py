@@ -72,6 +72,49 @@ logging.basicConfig(level=logging.INFO)
 
 stats_bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 
+@stats_bp.route('/search/commo', methods=['GET'])
+def get_commo():
+    if not DB_CONNECTION_STRING:
+        logging.error("DATABASE_URL environment variable not set.")
+        return jsonify({"error": "Database connection string is not configured."}), 500
+
+    company_id = request.args.get('company_id')
+    if not company_id:
+        return jsonify({"error": "Missing required parameter: company_id"}), 400
+
+    try:
+        conn = psycopg2.connect(DB_CONNECTION_STRING)
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            sql = """
+                SELECT 
+                    aa.commodities,
+                    aa.countries,
+                    aa.contract_value,
+                    aa.deadline,
+                    sa.publication_date
+                FROM 
+                    company_analysis ca
+                JOIN 
+                    article_analysis aa ON ca.article_analysis_id = aa.id
+                JOIN 
+                    scraped_articles sa ON aa.article_id = sa.id
+                WHERE 
+                    ca.company_id = %s
+            """
+            cur.execute(sql, (company_id,))
+            results = cur.fetchall()
+        
+        return jsonify(results), 200
+
+    except Exception as e:
+        logging.error(f"Error fetching data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        if conn:
+            conn.close()
+
+
 @stats_bp.route('/insights', methods=['GET'])
 def get_article_stats():
     """
@@ -237,49 +280,6 @@ def search_companies():
     finally:
         if conn:
             conn.close()
-
-@stats_bp.route('/search/commo', methods=['GET'])
-def get_commo():
-    if not DB_CONNECTION_STRING:
-        logging.error("DATABASE_URL environment variable not set.")
-        return jsonify({"error": "Database connection string is not configured."}), 500
-
-    company_id = request.args.get('company_id')
-    if not company_id:
-        return jsonify({"error": "Missing required parameter: company_id"}), 400
-
-    try:
-        conn = psycopg2.connect(DB_CONNECTION_STRING)
-        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            sql = """
-                SELECT 
-                    aa.commodities,
-                    aa.countries,
-                    aa.contract_value,
-                    aa.deadline,
-                    sa.publication_date
-                FROM 
-                    company_analysis ca
-                JOIN 
-                    article_analysis aa ON ca.article_analysis_id = aa.id
-                JOIN 
-                    scraped_articles sa ON aa.article_id = sa.id
-                WHERE 
-                    ca.company_id = %s
-            """
-            cur.execute(sql, (company_id,))
-            results = cur.fetchall()
-        
-        return jsonify(results), 200
-
-    except Exception as e:
-        logging.error(f"Error fetching data: {e}")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        if conn:
-            conn.close()
-
 
 @stats_bp.route('/search/tender', methods=['GET'])
 def search_tender():
@@ -745,6 +745,7 @@ def get_company_sentiments():
     finally:
         if conn:
             conn.close()
+
 
 @stats_bp.route('/company/article-count', methods=['GET'])
 def get_company_article_count():

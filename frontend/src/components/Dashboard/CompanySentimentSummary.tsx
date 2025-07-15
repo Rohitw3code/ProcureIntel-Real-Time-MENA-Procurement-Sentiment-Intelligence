@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Minus, Filter, X, BarChart3, Shuffle, Building2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Filter, X, BarChart3, Shuffle, Building2, ChevronRight } from 'lucide-react';
 import { statsApi, CompanySentimentSummary as CompanySentimentSummaryType, CompanySentimentSummaryParams, ShuffledCompany } from '../../services/api';
 
 interface CompanySentimentSummaryProps {
   isVisible: boolean;
+  onCompanyDetailsClick?: (companyId: string, companyName: string) => void;
 }
 
-export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = ({ isVisible }) => {
+export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = ({ 
+  isVisible, 
+  onCompanyDetailsClick 
+}) => {
   const [data, setData] = useState<CompanySentimentSummaryType[]>([]);
   const [shuffledData, setShuffledData] = useState<ShuffledCompany[]>([]);
   const [loading, setLoading] = useState(true);
@@ -297,60 +301,79 @@ export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = (
             {hasAppliedFilters && data.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {data.map((company, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg border border-gray-200 p-3 hover:shadow-md transition-shadow h-fit">
+                  <div 
+                    key={index} 
+                    onClick={() => {
+                      if (onCompanyDetailsClick && company.company_id) {
+                        onCompanyDetailsClick(company.company_id.toString(), company.company_name);
+                      }
+                    }}
+                    className={`bg-gray-50 rounded-lg border border-gray-200 p-3 transition-all duration-200 h-fit ${
+                      onCompanyDetailsClick && company.company_id 
+                        ? 'hover:shadow-lg hover:border-purple-300 cursor-pointer group hover:bg-white' 
+                        : 'hover:shadow-md'
+                    }`}
+                  >
                     <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900 text-sm leading-tight">
+                      <h3 className={`font-semibold text-gray-900 text-sm leading-tight flex-1 pr-2 ${
+                        onCompanyDetailsClick && company.company_id ? 'group-hover:text-purple-700' : ''
+                      }`}>
                         {company.company_name}
                       </h3>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {company.total_sentiments} mentions
-                      </span>
+                      <div className="flex items-center space-x-2 flex-shrink-0">
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                          {company.total_sentiments} mentions
+                        </span>
+                        {onCompanyDetailsClick && company.company_id && (
+                          <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
                       {/* Positive */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between min-w-0">
                         <div className="flex items-center space-x-2">
                           {getSentimentIcon('positive')}
-                          <span className="text-sm text-gray-600">Positive</span>
+                          <span className="text-xs sm:text-sm text-gray-600 flex-shrink-0">Positive</span>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs px-2 py-1 rounded ${getSentimentColor('positive')}`}>
+                        <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                          <span className={`text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${getSentimentColor('positive')}`}>
                             {company.positive}
                           </span>
-                          <span className="text-xs text-gray-500 w-8 text-right">
+                          <span className="text-xs text-gray-500 w-6 sm:w-8 text-right flex-shrink-0">
                             {company.total_sentiments > 0 ? Math.round((company.positive / company.total_sentiments) * 100) : 0}%
                           </span>
                         </div>
                       </div>
 
                       {/* Negative */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between min-w-0">
                         <div className="flex items-center space-x-2">
                           {getSentimentIcon('negative')}
-                          <span className="text-sm text-gray-600">Negative</span>
+                          <span className="text-xs sm:text-sm text-gray-600 flex-shrink-0">Negative</span>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs px-2 py-1 rounded ${getSentimentColor('negative')}`}>
+                        <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                          <span className={`text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${getSentimentColor('negative')}`}>
                             {company.negative}
                           </span>
-                          <span className="text-xs text-gray-500 w-8 text-right">
+                          <span className="text-xs text-gray-500 w-6 sm:w-8 text-right flex-shrink-0">
                             {company.total_sentiments > 0 ? Math.round((company.negative / company.total_sentiments) * 100) : 0}%
                           </span>
                         </div>
                       </div>
 
                       {/* Neutral */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between min-w-0">
                         <div className="flex items-center space-x-2">
                           {getSentimentIcon('neutral')}
-                          <span className="text-sm text-gray-600">Neutral</span>
+                          <span className="text-xs sm:text-sm text-gray-600 flex-shrink-0">Neutral</span>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs px-2 py-1 rounded ${getSentimentColor('neutral')}`}>
+                        <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                          <span className={`text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${getSentimentColor('neutral')}`}>
                             {company.neutral}
                           </span>
-                          <span className="text-xs text-gray-500 w-8 text-right">
+                          <span className="text-xs text-gray-500 w-6 sm:w-8 text-right flex-shrink-0">
                             {company.total_sentiments > 0 ? Math.round((company.neutral / company.total_sentiments) * 100) : 0}%
                           </span>
                         </div>
@@ -383,23 +406,58 @@ export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = (
             {!hasAppliedFilters && shuffledData.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {shuffledData.map((company, index) => (
-                  <div key={index} className="bg-gradient-to-br from-gray-50 to-white rounded-lg border border-gray-200 p-4 hover:shadow-lg transition-all duration-200 hover:border-purple-300">
+                  <div 
+                    key={index} 
+                    onClick={() => {
+                      if (onCompanyDetailsClick && company.company_id) {
+                        onCompanyDetailsClick(company.company_id.toString(), company.company_name);
+                      }
+                    }}
+                    className={`bg-gradient-to-br from-gray-50 to-white rounded-lg border border-gray-200 p-4 transition-all duration-200 ${
+                      onCompanyDetailsClick && company.company_id 
+                        ? 'hover:shadow-xl hover:border-purple-300 cursor-pointer group hover:from-purple-50 hover:to-white' 
+                        : 'hover:shadow-lg hover:border-purple-300'
+                    }`}
+                  >
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 min-w-0 flex-1">
                         <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
                           <Building2 className="h-4 w-4 text-purple-600" />
                         </div>
-                        <h3 className="font-semibold text-gray-900 text-sm leading-tight">
+                        <h3 className={`font-semibold text-gray-900 text-sm leading-tight min-w-0 flex-1 ${
+                          onCompanyDetailsClick && company.company_id ? 'group-hover:text-purple-700' : ''
+                        }`}>
                           {company.company_name}
                         </h3>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="hidden sm:flex items-center space-x-2 flex-shrink-0">
                         <span className="text-xs text-gray-500">
                           {formatDate(company.created_at)}
                         </span>
+                        {onCompanyDetailsClick && company.company_id && (
+                          <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                        )}
                         <div className={`inline-flex items-center px-2 py-1 rounded-full border text-xs ${getSentimentColor(company.sentiment)}`}>
                           {getSentimentIcon(company.sentiment)}
                           <span className="ml-1 font-medium">{company.sentiment}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mobile-only elements below company name */}
+                    <div className="sm:hidden mb-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className={`inline-flex items-center px-2 py-1 rounded-full border text-xs ${getSentimentColor(company.sentiment)}`}>
+                          {getSentimentIcon(company.sentiment)}
+                          <span className="ml-1 font-medium">{company.sentiment}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500">
+                            {formatDate(company.created_at)}
+                          </span>
+                          {onCompanyDetailsClick && company.company_id && (
+                            <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                          )}
                         </div>
                       </div>
                     </div>
