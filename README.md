@@ -40,26 +40,6 @@ ProcureIntel is an AI-powered procurement intelligence platform designed for the
 <td align="center">🏛️<br><b>Government Agencies</b><br>Market transparency monitoring</td>
 </tr>
 </table>
-
-## 🛠️ Tech Stack
-
-**Frontend**
-- React
-- TypeScript
-- Tailwind CSS
-- Vite
-
-**Backend**
-- Python
-- LangChain
-- OpenAI
-- Groq
-  
-**Database & Infrastructure**
-- Supabase
-- Azure
-- Firebase
-- Vector
   
 ## 🔄 System Architecture
 
@@ -142,13 +122,7 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant 👨‍💻 Dev as Developer Portal
-    participant 🕷️ Scraper as Web Scrapers
-    participant 🤖 AI as AI Engine
-    participant 🗄️ DB as Supabase DB
-    participant ⚡ API as Flask API
-    participant 💻 UI as React Frontend
-    participant 👤 User as End User
+    participant 💻 UI as React Frontend (End User)
     
     👨‍💻->>🕷️: Initialize scrapers for MENA sources
     🕷️->>🕷️: Extract article links
@@ -206,6 +180,27 @@ sequenceDiagram
 </td>
 </tr>
 </table>
+
+## 🛠️ Tech Stack
+
+**Frontend**
+- React
+- TypeScript
+- Tailwind CSS
+- Vite
+
+**Backend**
+- Python
+- LangChain
+- OpenAI
+- Groq
+  
+**Database & Infrastructure**
+- Supabase
+- Azure
+- Firebase
+- Vector
+
 
 ## ✨ Key Features
 
