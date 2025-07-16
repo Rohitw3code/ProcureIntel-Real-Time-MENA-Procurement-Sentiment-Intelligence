@@ -145,7 +145,7 @@ export const CompanySearch: React.FC<CompanySearchProps> = ({
               </div>
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  AI Company Intelligence
+                  AI Company/Entity Intelligence
                 </h2>
                 <p className="text-sm text-gray-600 flex items-center space-x-1">
                   <Zap className="h-3 w-3 text-emerald-500" />

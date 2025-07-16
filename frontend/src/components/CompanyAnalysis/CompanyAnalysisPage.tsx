@@ -211,7 +211,7 @@ export const CompanyAnalysisPage: React.FC<CompanyAnalysisPageProps> = ({
                     ID: {companyId}
                   </span>
                   <span className="hidden sm:inline text-gray-300">•</span>
-                  <p className="text-xs sm:text-sm text-gray-600">Company Intelligence Analysis</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Company/Entity Intelligence Analysis</p>
                 </div>
               </div>
             </div>
