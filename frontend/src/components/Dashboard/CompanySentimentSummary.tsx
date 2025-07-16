@@ -118,7 +118,7 @@ export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = (
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {hasAppliedFilters ? 'Company Sentiment Overview' : 'Featured Companies'}
+              {hasAppliedFilters ? 'Company Sentiment Overview' : 'Featured Companies/Entity'}
             </h2>
             <p className="text-sm text-gray-600">
               {hasAppliedFilters 
@@ -212,7 +212,7 @@ export const CompanySentimentSummary: React.FC<CompanySentimentSummaryProps> = (
                 </label>
                 <input
                   type="text"
-                  placeholder="Search company..."
+                  placeholder="Search entity/company..."
                   value={filters.name || ''}
                   onChange={(e) => handleFilterChange('name', e.target.value || undefined)}
                   className="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-xs"

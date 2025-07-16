@@ -186,7 +186,7 @@ export const CompanySearch: React.FC<CompanySearchProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Search companies with AI intelligence..."
+                  placeholder="Search entity/companies with AI intelligence..."
                   className="block w-full pl-12 sm:pl-16 pr-4 py-4 sm:py-5 text-base sm:text-lg bg-white/90 backdrop-blur-sm border-2 border-gray-200/60 rounded-xl leading-6 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all duration-300 shadow-lg hover:shadow-xl font-medium"
                 />
                 

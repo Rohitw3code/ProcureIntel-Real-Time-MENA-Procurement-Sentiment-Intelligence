@@ -210,8 +210,7 @@ python app.py
 ### 7. Access the Application
 
 ```
-Frontend: http://localhost:5173
-Backend API: http://localhost:5000
+Website : https://procumentintel.web.app/
 ```
 
 ---
